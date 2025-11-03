@@ -1,4 +1,3 @@
-// context/AuthContext.tsx (file path එකේ space එක remove කරන්න)
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 
 interface AuthContextType {

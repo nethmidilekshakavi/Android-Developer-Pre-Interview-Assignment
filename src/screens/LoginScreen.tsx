@@ -187,12 +187,12 @@ export default function LoginScreen({ navigation }: any) {
                             </LinearGradient>
                         </TouchableOpacity>
 
-                        <View style={styles.helpContainer}>
-                            <Icon name="information" size={16} color="#6B7280" />
-                            <Text style={styles.helpText}>
-                                Use: admin@gmail.com / admin123
-                            </Text>
-                        </View>
+                        {/*<View style={styles.helpContainer}>*/}
+                        {/*    <Icon name="information" size={16} color="#6B7280" />*/}
+                        {/*    <Text style={styles.helpText}>*/}
+                        {/*        Use: admin@gmail.com / admin123*/}
+                        {/*    </Text>*/}
+                        {/*</View>*/}
                     </View>
                 </ScrollView>
             </KeyboardAvoidingView>

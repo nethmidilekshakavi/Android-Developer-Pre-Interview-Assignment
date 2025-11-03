@@ -5,8 +5,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "../screens/LoginScreen";
 
 import LoanFormScreen from "../screens/LoanFormScreen";
-import RegisterScreen from "../screens/LoanFormScreen";
 import {useAuth} from "../context/ AuthContext";
+import LoanListScreen from "../screens/ApplicationsListScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -22,7 +22,7 @@ export default function AppNavigator() {
                 ) : (
                     <>
                         <Stack.Screen name="Login" component={LoginScreen} />
-                        <Stack.Screen name="Register" component={RegisterScreen} />
+                        <Stack.Screen name="LoanList" component={LoanListScreen} />
                     </>
                 )}
             </Stack.Navigator>
