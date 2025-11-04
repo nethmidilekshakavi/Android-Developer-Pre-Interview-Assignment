@@ -3,7 +3,6 @@ import {
     View,
     Text,
     TextInput,
-    Alert,
     StyleSheet,
     TouchableOpacity,
     KeyboardAvoidingView,
@@ -56,7 +55,6 @@ export default function LoanFormScreen({ navigation }: Props) {
     };
 
     const handleSubmit = async () => {
-        // Validations
         if (!name.trim()) return Toast.show({ type: "error", text1: "Enter your name" });
         if (!email.trim()) return Toast.show({ type: "error", text1: "Enter your email" });
         if (!validateEmail(email))
@@ -227,7 +225,6 @@ function PasswordField({ label, value, onChange, show, toggleShow }: any) {
     );
 }
 
-/** Styles **/
 const styles = StyleSheet.create({
     gradient: { flex: 1 },
     container: { flex: 1 },

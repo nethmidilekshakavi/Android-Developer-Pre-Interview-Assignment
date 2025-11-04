@@ -3,13 +3,11 @@ import * as SQLite from "expo-sqlite";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const isWeb = Platform.OS === "web";
-
 let db: SQLite.WebSQLDatabase | null = null;
 
 // Initialize DB
 export const initDB = async (): Promise<void> => {
     if (isWeb) {
-        // Web fallback: no table needed, just ensure key exists
         const existing = await AsyncStorage.getItem("applications");
         if (!existing) await AsyncStorage.setItem("applications", JSON.stringify([]));
         console.log("✅ Web: AsyncStorage initialized");
@@ -30,25 +28,22 @@ export const initDB = async (): Promise<void> => {
     }
 };
 
-// Get DB instance (Mobile only)
 export const getDB = async (): Promise<SQLite.WebSQLDatabase | null> => {
-    if (isWeb) return null; // Web uses AsyncStorage
+    if (isWeb) return null;
     if (!db) db = await SQLite.openDatabaseAsync("loanappDB");
     return db;
 };
 
-// Insert application
 export const saveApplication = async (application: any) => {
     if (isWeb) {
-        const existing = JSON.parse(
-            (await AsyncStorage.getItem("applications")) || "[]"
-        );
+        const existing = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
         existing.push(application);
         await AsyncStorage.setItem("applications", JSON.stringify(existing));
     } else {
         const database = await getDB();
         await database?.execAsync(
-            `INSERT INTO applications (name, email, tel, occupation, salary, paysheetUri) VALUES (?, ?, ?, ?, ?, ?);`,
+            `INSERT INTO applications (name, email, tel, occupation, salary, paysheetUri)
+       VALUES (?, ?, ?, ?, ?, ?);`,
             [
                 application.name,
                 application.email,
@@ -61,7 +56,6 @@ export const saveApplication = async (application: any) => {
     }
 };
 
-// Fetch all applications
 export const getApplications = async () => {
     if (isWeb) {
         return JSON.parse((await AsyncStorage.getItem("applications")) || "[]");

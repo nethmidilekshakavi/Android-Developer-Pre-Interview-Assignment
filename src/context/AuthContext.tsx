@@ -14,16 +14,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => {
         const checkLogin = async () => {
-            const stored = await AsyncStorage.getItem("loggedIn");
-            if (stored === "true") setIsAuthenticated(true);
+            try {
+                const stored = await AsyncStorage.getItem("loggedIn");
+                if (stored === "true") setIsAuthenticated(true);
+            } catch (error) {
+                console.error("Check login error:", error);
+            }
         };
         checkLogin();
     }, []);
 
     const login = async (username: string, password: string): Promise<boolean> => {
-        if (username === "admin@gmail.com" && password === "admin123") {
+        if (username.trim() === "manager" && password.trim() === "#mgr2025") {
             setIsAuthenticated(true);
             await AsyncStorage.setItem("loggedIn", "true");
+            await AsyncStorage.setItem("username", username);
             return true;
         }
         return false;
@@ -32,6 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = async () => {
         setIsAuthenticated(false);
         await AsyncStorage.removeItem("loggedIn");
+        await AsyncStorage.removeItem("username");
     };
 
     return (
@@ -40,6 +46,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         </AuthContext.Provider>
     );
 };
+
 
 export const useAuth = () => {
     const context = useContext(AuthContext);
