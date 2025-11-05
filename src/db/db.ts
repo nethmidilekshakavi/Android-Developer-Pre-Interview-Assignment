@@ -1,8 +1,10 @@
 import { Platform } from "react-native";
 import * as SQLite from "expo-sqlite";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LoanApplication } from "../models/LoanApplication";
 
 const isWeb = Platform.OS === "web";
+// @ts-ignore
 let db: SQLite.WebSQLDatabase | null = null;
 
 // Initialize DB
@@ -36,6 +38,7 @@ export const initDB = async (): Promise<void> => {
     }
 };
 
+// @ts-ignore
 export const getDB = async (): Promise<SQLite.WebSQLDatabase | null> => {
     if (isWeb) return null;
     if (!db) db = await SQLite.openDatabaseAsync("loanappDB");
@@ -43,15 +46,15 @@ export const getDB = async (): Promise<SQLite.WebSQLDatabase | null> => {
 };
 
 // Save Application
-export const saveApplication = async (application: any) => {
+export const saveApplication = async (application: Omit<LoanApplication, 'id'>) => {
     try {
         const timestamp = new Date().toISOString();
 
         if (isWeb) {
             const existing = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
-            const newApp = {
+            const newApp: LoanApplication = {
                 ...application,
-                id: existing.length > 0 ? Math.max(...existing.map((a: any) => a.id || 0)) + 1 : 1,
+                id: existing.length > 0 ? Math.max(...existing.map((a: LoanApplication) => a.id || 0)) + 1 : 1,
                 submittedAt: timestamp
             };
             existing.push(newApp);
@@ -75,8 +78,15 @@ export const saveApplication = async (application: any) => {
                     timestamp
                 ]
             );
+
+            const newApp: LoanApplication = {
+                ...application,
+                id: result.lastInsertRowId as number,
+                submittedAt: timestamp
+            };
+
             console.log("✅ Saved to SQLite, ID:", result.lastInsertRowId);
-            return result;
+            return newApp;
         }
     } catch (error) {
         console.error("❌ Save Error:", error);
@@ -85,11 +95,11 @@ export const saveApplication = async (application: any) => {
 };
 
 // Get All Applications
-export const getApplications = async () => {
+export const getApplications = async (): Promise<LoanApplication[]> => {
     try {
         if (isWeb) {
             const data = await AsyncStorage.getItem("applications");
-            const parsed = JSON.parse(data || "[]");
+            const parsed: LoanApplication[] = JSON.parse(data || "[]");
             console.log("✅ Loaded from AsyncStorage:", parsed.length, "items");
             console.log("Data:", parsed);
             return parsed;
@@ -101,9 +111,20 @@ export const getApplications = async () => {
             }
 
             const result = await database.getAllAsync("SELECT * FROM applications ORDER BY id DESC;");
-            console.log("✅ Loaded from SQLite:", result?.length || 0, "items");
-            console.log("Data:", result);
-            return result || [];
+            const applications: LoanApplication[] = (result || []).map((row: any) => ({
+                id: row.id,
+                name: row.name,
+                email: row.email,
+                tel: row.tel,
+                occupation: row.occupation,
+                salary: row.salary,
+                paysheetUri: row.paysheetUri,
+                submittedAt: row.submittedAt
+            }));
+
+            console.log("✅ Loaded from SQLite:", applications.length, "items");
+            console.log("Data:", applications);
+            return applications;
         }
     } catch (error) {
         console.error("❌ Get Applications Error:", error);
@@ -111,35 +132,12 @@ export const getApplications = async () => {
     }
 };
 
-// Delete Single Application
-export const deleteApplication = async (id: number) => {
+// Delete PDF Only (keep application) by ID
+export const deletePdfOnly = async (id: number): Promise<boolean> => {
     try {
         if (isWeb) {
-            const existing = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
-            const filtered = existing.filter((app: any) => app.id !== id);
-            await AsyncStorage.setItem("applications", JSON.stringify(filtered));
-            console.log("✅ Deleted from AsyncStorage, ID:", id);
-            return true;
-        } else {
-            const database = await getDB();
-            if (!database) throw new Error("Database not initialized");
-
-            await database.runAsync("DELETE FROM applications WHERE id = ?;", [id]);
-            console.log("✅ Deleted from SQLite, ID:", id);
-            return true;
-        }
-    } catch (error) {
-        console.error("❌ Delete Error:", error);
-        throw error;
-    }
-};
-
-// Delete PDF Only (keep application)
-export const deletePdfOnly = async (id: number) => {
-    try {
-        if (isWeb) {
-            const existing = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
-            const updated = existing.map((app: any) =>
+            const existing: LoanApplication[] = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
+            const updated = existing.map((app: LoanApplication) =>
                 app.id === id ? { ...app, paysheetUri: null } : app
             );
             await AsyncStorage.setItem("applications", JSON.stringify(updated));
@@ -160,7 +158,7 @@ export const deletePdfOnly = async (id: number) => {
 };
 
 // Delete All Applications
-export const deleteAllApplications = async () => {
+export const deleteAllApplications = async (): Promise<boolean> => {
     try {
         if (isWeb) {
             await AsyncStorage.setItem("applications", JSON.stringify([]));
@@ -180,12 +178,12 @@ export const deleteAllApplications = async () => {
     }
 };
 
-// Update Application
-export const updateApplication = async (id: number, application: any) => {
+// Update Application by ID
+export const updateApplication = async (id: number, application: Partial<LoanApplication>): Promise<boolean> => {
     try {
         if (isWeb) {
-            const existing = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
-            const updated = existing.map((app: any) =>
+            const existing: LoanApplication[] = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
+            const updated = existing.map((app: LoanApplication) =>
                 app.id === id ? { ...app, ...application } : app
             );
             await AsyncStorage.setItem("applications", JSON.stringify(updated));
@@ -218,12 +216,12 @@ export const updateApplication = async (id: number, application: any) => {
     }
 };
 
-// Get Single Application
-export const getApplicationById = async (id: number) => {
+// Get Single Application by ID
+export const getApplicationById = async (id: number): Promise<LoanApplication | null> => {
     try {
         if (isWeb) {
-            const existing = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
-            const app = existing.find((app: any) => app.id === id) || null;
+            const existing: LoanApplication[] = JSON.parse((await AsyncStorage.getItem("applications")) || "[]");
+            const app = existing.find((app: LoanApplication) => app.id === id) || null;
             console.log("✅ Found in AsyncStorage:", app);
             return app;
         } else {
@@ -234,11 +232,57 @@ export const getApplicationById = async (id: number) => {
                 "SELECT * FROM applications WHERE id = ?;",
                 [id]
             );
-            console.log("✅ Found in SQLite:", result);
-            return result || null;
+
+            if (!result) {
+                console.log("❌ Application not found, ID:", id);
+                return null;
+            }
+
+            const app: LoanApplication = {
+                id: result.id,
+                name: result.name,
+                email: result.email,
+                tel: result.tel,
+                occupation: result.occupation,
+                salary: result.salary,
+                paysheetUri: result.paysheetUri,
+                submittedAt: result.submittedAt
+            };
+
+            console.log("✅ Found in SQLite:", app);
+            return app;
         }
     } catch (error) {
         console.error("❌ Get By ID Error:", error);
         return null;
+    }
+};
+
+export const deleteApplication = async (id: number): Promise<boolean> => {
+    try {
+        if (isWeb) {
+            // 🔹 Use consistent key for web storage
+            const existingData = await AsyncStorage.getItem("loanApplications");
+            const existing: LoanApplication[] = existingData ? JSON.parse(existingData) : [];
+
+            // Remove matching application by ID
+            const filtered = existing.filter((app: LoanApplication) => app.id !== id);
+
+            // Save updated list
+            await AsyncStorage.setItem("loanApplications", JSON.stringify(filtered));
+            console.log("✅ Deleted from AsyncStorage, ID:", id);
+            return true;
+        } else {
+            // 🔹 Mobile: SQLite
+            const database = await getDB();
+            if (!database) throw new Error("Database not initialized");
+
+            await database.runAsync("DELETE FROM applications WHERE id = ?;", [id]);
+            console.log("✅ Deleted from SQLite, ID:", id);
+            return true;
+        }
+    } catch (error) {
+        console.error("❌ Delete Error:", error);
+        throw error;
     }
 };

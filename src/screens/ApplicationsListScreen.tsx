@@ -33,7 +33,7 @@ export default function LoanListScreen({ navigation }: any) {
     const [pdfModalVisible, setPdfModalVisible] = useState(false);
     const { logout } = useAuth();
 
-    // 🔹 Load loans
+    // 🔹 Load loans - FIXED VERSION
     const loadLoans = async () => {
         try {
             const data = await AsyncStorage.getItem("loanApplications");
@@ -93,7 +93,7 @@ export default function LoanListScreen({ navigation }: any) {
         ]);
     };
 
-    // 🔹 Clear all applications
+    // 🔹 Clear all applications - FIXED
     const clearAllData = () => {
         if (loans.length === 0) {
             Alert.alert("No Data", "There are no applications to delete");
@@ -111,8 +111,7 @@ export default function LoanListScreen({ navigation }: any) {
                     onPress: async () => {
                         try {
                             await deleteAllApplications();
-                            await AsyncStorage.removeItem("loanApplications");
-                            await loadLoans();
+                            await loadLoans(); // Reload the list after deletion
                             Alert.alert("Success", "All applications deleted successfully");
                         } catch (error) {
                             console.error("Clear all error:", error);
@@ -203,14 +202,14 @@ export default function LoanListScreen({ navigation }: any) {
 
             let fixedUri = uri;
 
-            // Fix URI format for mobile
-            if (!uri.startsWith('file://') && !uri.startsWith('http') && !uri.startsWith('content://')) {
+            // Fix URI format for various cases
+            if (!uri.startsWith('file://') && !uri.startsWith('http') && !uri.startsWith('content://') && !uri.startsWith('data:')) {
                 fixedUri = `file://${uri}`;
             }
 
-            console.log("📱 Fixed URI:", fixedUri);
+            console.log("📱 Fixed URI for mobile:", fixedUri);
 
-            // Navigate to PDF View Screen (for viewing only)
+            // Navigate to PDF View Screen with the fixed URI
             navigation.navigate("PdfView", {
                 pdfUri: fixedUri,
                 applicantName: applicantName,
@@ -257,42 +256,74 @@ export default function LoanListScreen({ navigation }: any) {
         try {
             console.log("🌐 Web PDF Download - URI:", uri);
 
-            // Handle blob URLs - Force download
+            // Handle blob URLs
             if (uri.startsWith('blob:')) {
                 console.log("🔧 Downloading blob URL");
-
-                // Create a temporary anchor element for download
                 const link = document.createElement('a');
                 link.href = uri;
                 link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
                 link.target = '_blank';
-
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-
-                Alert.alert("Download Started", "PDF download has been initiated. Please check your downloads folder.");
+                Alert.alert("Download Started", "PDF download has been initiated.");
                 return;
             }
 
-            // For other URLs, create download link
+            // Handle data URLs (base64)
+            if (uri.startsWith('data:')) {
+                console.log("🔧 Downloading data URL");
+                const link = document.createElement('a');
+                link.href = uri;
+                link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                Alert.alert("Download Started", "PDF download has been initiated.");
+                return;
+            }
+
+            // Handle file URLs
+            if (uri.startsWith('file://')) {
+                console.log("🔧 Handling file URL download");
+                // For file URLs, we need to fetch and create a blob
+                fetch(uri)
+                    .then(response => response.blob())
+                    .then(blob => {
+                        const blobUrl = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = blobUrl;
+                        link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(blobUrl);
+                        Alert.alert("Download Started", "PDF download has been initiated.");
+                    })
+                    .catch(error => {
+                        console.error("File URL download error:", error);
+                        Alert.alert("Download Failed", "Unable to download this file type.");
+                    });
+                return;
+            }
+
+            // For other URLs (HTTP/HTTPS)
             const link = document.createElement('a');
             link.href = uri;
             link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
             link.target = '_blank';
-
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-
             Alert.alert("Download Started", "PDF download has been initiated.");
+
         } catch (error) {
             console.error("Web download error:", error);
             Alert.alert("Download Failed", "Unable to download PDF file");
         }
     };
 
-    // 🔹 Delete PDF only
+    // 🔹 Delete PDF only - FIXED
     const handleDeletePdf = async (loanId: number, applicantName: string) => {
         Alert.alert(
             "Delete Paysheet",
@@ -305,16 +336,7 @@ export default function LoanListScreen({ navigation }: any) {
                     onPress: async () => {
                         try {
                             await deletePdfOnly(loanId);
-                            // Update AsyncStorage
-                            const storedData = await AsyncStorage.getItem("loanApplications");
-                            if (storedData) {
-                                const allLoans: LoanApplication[] = JSON.parse(storedData);
-                                const updatedLoans = allLoans.map((loan) =>
-                                    loan.id === loanId ? { ...loan, paysheetUri: null } : loan
-                                );
-                                await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
-                            }
-                            await loadLoans();
+                            await loadLoans(); // Reload the list after deletion
                             Alert.alert("Success", "Paysheet removed successfully");
                         } catch (error) {
                             console.error("Delete PDF error:", error);
@@ -331,11 +353,10 @@ export default function LoanListScreen({ navigation }: any) {
         navigation.navigate("ApplicationForm", { editMode: true, loanData: loan });
     };
 
-    // 🔹 Delete Application
     const handleDeleteApplication = (id: number, name: string) => {
         Alert.alert(
             "Delete Application",
-            `Permanently delete ${name}'s loan application?`,
+            `Are you sure you want to permanently delete ${name}'s application?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -343,19 +364,13 @@ export default function LoanListScreen({ navigation }: any) {
                     style: "destructive",
                     onPress: async () => {
                         try {
+                            console.log("🗑️ Deleting application ID:", id);
                             await deleteApplication(id);
-                            // Update AsyncStorage
-                            const storedData = await AsyncStorage.getItem("loanApplications");
-                            if (storedData) {
-                                const allLoans: LoanApplication[] = JSON.parse(storedData);
-                                const updatedLoans = allLoans.filter((loan) => loan.id !== id);
-                                await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
-                            }
-                            await loadLoans();
-                            Alert.alert("Success", `${name}'s application has been removed`);
+                            await loadLoans(); // refresh list
+                            Alert.alert("Success", `${name}'s application has been deleted`);
                         } catch (error) {
-                            console.error("Delete application error:", error);
-                            Alert.alert("Error", "Failed to delete application");
+                            console.error("❌ Delete Error:", error);
+                            Alert.alert("Error", "Failed to delete the application");
                         }
                     },
                 },
@@ -364,6 +379,7 @@ export default function LoanListScreen({ navigation }: any) {
     };
 
     // 🔹 Render individual loan card
+    // @ts-ignore
     const renderLoanItem = ({ item }: { item: LoanApplication }) => (
         <View style={styles.card}>
             <View style={styles.cardHeader}>
@@ -379,7 +395,7 @@ export default function LoanListScreen({ navigation }: any) {
                         <Icon name="pencil" size={18} color="#667eea" />
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={() => handleDeleteApplication(item.id, item.name)}
+                        onPress={() => handleDeleteApplication(item.id!, item.name)}
                         style={styles.deleteButton}
                     >
                         <Icon name="delete" size={18} color="#ef4444" />
@@ -402,7 +418,6 @@ export default function LoanListScreen({ navigation }: any) {
                     <Text style={styles.detailText}>{item.tel}</Text>
                 </View>
 
-
                 <View style={styles.detailRow}>
                     <View style={styles.iconCircle}>
                         <Icon name="briefcase" size={14} color="#f59e0b" />
@@ -424,13 +439,13 @@ export default function LoanListScreen({ navigation }: any) {
                         <Icon name="calendar-clock" size={14} color="#6b7280" />
                     </View>
                     <Text style={styles.detailText}>
-                        {new Date(item.submittedAt).toLocaleDateString("en-US", {
+                        {item.submittedAt ? new Date(item.submittedAt).toLocaleDateString("en-US", {
                             month: "short",
                             day: "numeric",
                             year: "numeric",
                             hour: "2-digit",
                             minute: "2-digit",
-                        })}
+                        }) : "Not available"}
                     </Text>
                 </View>
             </View>
@@ -447,6 +462,7 @@ export default function LoanListScreen({ navigation }: any) {
                         {/* VIEW PDF BUTTON - ONLY FOR VIEWING */}
                         <TouchableOpacity
                             style={[styles.pdfButton, styles.viewButton]}
+                            // @ts-ignore
                             onPress={() => handleViewPdf(item.paysheetUri, item.name)}
                         >
                             <Icon name="eye" size={16} color="#fff" />
@@ -458,19 +474,13 @@ export default function LoanListScreen({ navigation }: any) {
                         {/* DOWNLOAD PDF BUTTON - ONLY FOR DOWNLOADING */}
                         <TouchableOpacity
                             style={[styles.pdfButton, styles.downloadButton]}
+                            // @ts-ignore
                             onPress={() => handleDownloadPdf(item.paysheetUri, item.name)}
                         >
                             <Icon name="download" size={16} color="#fff" />
                             <Text style={styles.pdfButtonText}>Download</Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={[styles.pdfButton, styles.removePdfButton]}
-                            onPress={() => handleDeletePdf(item.id, item.name)}
-                        >
-                            <Icon name="close-circle" size={16} color="#fff" />
-                            <Text style={styles.pdfButtonText}>Remove</Text>
-                        </TouchableOpacity>
                     </View>
                 ) : (
                     <View style={styles.noPdfContainer}>
@@ -552,7 +562,7 @@ export default function LoanListScreen({ navigation }: any) {
             ) : (
                 <FlatList
                     data={loans}
-                    keyExtractor={(item) => item.id.toString()}
+                    keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
                     renderItem={renderLoanItem}
                     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     contentContainerStyle={styles.listContent}
@@ -641,11 +651,11 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 26,
         fontWeight: "bold",
-        color: "#1a202c",
+        color: "#1e293b", // Professional dark blue
     },
     subtitle: {
         fontSize: 13,
-        color: "#718096",
+        color: "#64748b", // Professional gray
         marginTop: 2,
     },
     headerButtons: {
@@ -655,7 +665,7 @@ const styles = StyleSheet.create({
     headerButton: {
         padding: 10,
         borderRadius: 10,
-        backgroundColor: "#f7fafc",
+        backgroundColor: "#f1f5f9", // Light professional gray
     },
     statsContainer: {
         flexDirection: "row",
@@ -669,34 +679,34 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     statCardPrimary: {
-        backgroundColor: "#ede9fe",
+        backgroundColor: "#e0f2fe", // Professional light blue
     },
     statCardSuccess: {
-        backgroundColor: "#d1fae5",
+        backgroundColor: "#f0fdf4", // Professional light green
     },
     statCardWarning: {
-        backgroundColor: "#fef3c7",
+        backgroundColor: "#fffbeb", // Professional light amber
     },
     statNumber: {
         fontSize: 20,
         fontWeight: "bold",
-        color: "#1a202c",
+        color: "#1e293b",
         marginTop: 4,
     },
     statLabel: {
         fontSize: 11,
-        color: "#6b7280",
+        color: "#64748b",
         marginTop: 2,
     },
     addButton: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "#667eea",
+        backgroundColor: "#2563eb", // Professional blue
         margin: 16,
         padding: 14,
         borderRadius: 12,
-        shadowColor: "#667eea",
+        shadowColor: "#2563eb",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
@@ -730,7 +740,7 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         paddingBottom: 12,
         borderBottomWidth: 1,
-        borderBottomColor: "#f3f4f6",
+        borderBottomColor: "#f1f5f9",
     },
     headerLeft: {
         flex: 1,
@@ -738,13 +748,13 @@ const styles = StyleSheet.create({
     name: {
         fontSize: 17,
         fontWeight: "bold",
-        color: "#1a202c",
+        color: "#1e293b",
         marginBottom: 6,
     },
     idBadge: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#ede9fe",
+        backgroundColor: "#e0f2fe", // Professional light blue
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 12,
@@ -753,7 +763,7 @@ const styles = StyleSheet.create({
     },
     loanId: {
         fontSize: 12,
-        color: "#667eea",
+        color: "#0369a1", // Professional dark blue
         fontWeight: "600",
     },
     actionButtons: {
@@ -763,12 +773,12 @@ const styles = StyleSheet.create({
     editButton: {
         padding: 8,
         borderRadius: 8,
-        backgroundColor: "#ede9fe",
+        backgroundColor: "#e0f2fe", // Professional light blue
     },
     deleteButton: {
         padding: 8,
         borderRadius: 8,
-        backgroundColor: "#fee2e2",
+        backgroundColor: "#fef2f2", // Professional light red
     },
     details: {
         gap: 10,
@@ -783,26 +793,28 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: "#f7fafc",
+        backgroundColor: "#f8fafc", // Light gray
         justifyContent: "center",
         alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#e2e8f0",
     },
     detailText: {
         fontSize: 14,
-        color: "#4b5563",
+        color: "#475569",
         flex: 1,
     },
     salaryText: {
         fontWeight: "600",
-        color: "#8b5cf6",
+        color: "#059669", // Professional green
     },
     pdfSection: {
         marginTop: 12,
         padding: 12,
-        backgroundColor: "#fef2f2",
+        backgroundColor: "#f8fafc",
         borderRadius: 12,
         borderWidth: 1,
-        borderColor: "#fecaca",
+        borderColor: "#e2e8f0",
     },
     pdfHeader: {
         flexDirection: "row",
@@ -813,7 +825,7 @@ const styles = StyleSheet.create({
     pdfHeaderText: {
         fontSize: 13,
         fontWeight: "600",
-        color: "#991b1b",
+        color: "#475569",
     },
     pdfActions: {
         flexDirection: "row",
@@ -829,13 +841,10 @@ const styles = StyleSheet.create({
         gap: 4,
     },
     viewButton: {
-        backgroundColor: "#667eea",
+        backgroundColor: "#2563eb", // Professional blue
     },
     downloadButton: {
-        backgroundColor: "#10b981",
-    },
-    removePdfButton: {
-        backgroundColor: "#ef4444",
+        backgroundColor: "#059669", // Professional green
     },
     pdfButtonText: {
         color: "#fff",
@@ -847,12 +856,12 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         padding: 10,
-        backgroundColor: "#fff",
+        backgroundColor: "#f8fafc",
         borderRadius: 8,
         gap: 8,
     },
     noPdfText: {
-        color: "#9ca3af",
+        color: "#94a3b8",
         fontSize: 13,
         fontStyle: "italic",
     },
@@ -867,7 +876,7 @@ const styles = StyleSheet.create({
         width: 120,
         height: 120,
         borderRadius: 60,
-        backgroundColor: "#f3f4f6",
+        backgroundColor: "#f1f5f9",
         justifyContent: "center",
         alignItems: "center",
         marginBottom: 20,
@@ -875,12 +884,12 @@ const styles = StyleSheet.create({
     emptyTitle: {
         fontSize: 20,
         fontWeight: "bold",
-        color: "#374151",
+        color: "#334155",
         marginBottom: 8,
     },
     emptyText: {
         fontSize: 14,
-        color: "#9ca3af",
+        color: "#64748b",
         textAlign: "center",
         marginBottom: 24,
     },
@@ -892,11 +901,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         borderRadius: 12,
         borderWidth: 2,
-        borderColor: "#667eea",
+        borderColor: "#2563eb", // Professional blue
         gap: 8,
     },
     emptyButtonText: {
-        color: "#667eea",
+        color: "#2563eb", // Professional blue
         fontSize: 15,
         fontWeight: "600",
     },
@@ -910,12 +919,12 @@ const styles = StyleSheet.create({
         alignItems: "center",
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: "#f3f4f6",
+        borderBottomColor: "#f1f5f9",
     },
     modalTitle: {
         fontSize: 18,
         fontWeight: "bold",
-        color: "#1a202c",
+        color: "#1e293b",
     },
     closeButton: {
         padding: 4,
@@ -931,25 +940,25 @@ const styles = StyleSheet.create({
     pdfInfoTitle: {
         fontSize: 20,
         fontWeight: "bold",
-        color: "#1a202c",
+        color: "#1e293b",
         marginTop: 20,
     },
     pdfInfoText: {
         fontSize: 14,
-        color: "#6b7280",
+        color: "#64748b",
         marginTop: 8,
         textAlign: "center",
     },
     modalShareButton: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#10b981",
+        backgroundColor: "#2563eb",
         paddingVertical: 14,
         paddingHorizontal: 32,
         borderRadius: 12,
         marginTop: 32,
         gap: 8,
-        shadowColor: "#10b981",
+        shadowColor: "#2563eb",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,

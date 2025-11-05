@@ -75,8 +75,10 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                 const file = result.assets[0];
                 setPdfFile(file);
                 Toast.show({ type: "success", text1: `Selected: ${file.name}` });
+                // @ts-ignore
             } else if (result.type === "success") {
                 setPdfFile(result);
+                // @ts-ignore
                 Toast.show({ type: "success", text1: `Selected: ${result.name}` });
             }
         } catch (err) {
