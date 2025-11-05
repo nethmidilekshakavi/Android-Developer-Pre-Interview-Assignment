@@ -59,8 +59,31 @@ Applicants can submit loan applications with paysheet PDFs, while managers can s
 
 ---
 
+## Screenshots
+
+### Welcome Page
+![Welcome Page](screenshots/welocme.png)
+
+### Login Page
+![Login Page](screenshots/login.png)
+
+### LoanApplication Page
+![Home Page](screenshots/LoanApplication.png)
+
+### Manager Dashboard
+![Recipe Details](screenshots/managerDashBoard.png)
+
+
+---
+
+## APK / Build
+Download APK: [LoanApp APK](https://expo.dev/artifacts/eas/gfiT27GWLUpLtMh3b12AFJ.apk)
+
+
+
 ## 🧠 System Flow
 
 ```plaintext
 Applicant → Loan Form → Upload PDF → Save / Submit  
 Manager → Login → View Applications → Edit / Delete → View PDF  
+
