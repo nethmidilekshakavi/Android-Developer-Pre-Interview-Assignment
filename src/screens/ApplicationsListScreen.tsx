@@ -1,4 +1,3 @@
-// screens/ApplicationsListScreen.tsx
 import React, { useEffect, useState } from "react";
 import {
     View,
@@ -10,12 +9,21 @@ import {
     RefreshControl,
     Modal,
     ScrollView,
+    Linking,
+    Platform,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useAuth } from "../context/AuthContext";
+import {
+    getApplications,
+    deleteApplication,
+    deletePdfOnly,
+    deleteAllApplications,
+    initDB,
+} from "../db/db";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {LoanApplication} from "../models/LoanApplication";
 
 export default function LoanListScreen({ navigation }: any) {
@@ -25,6 +33,7 @@ export default function LoanListScreen({ navigation }: any) {
     const [pdfModalVisible, setPdfModalVisible] = useState(false);
     const { logout } = useAuth();
 
+    // 🔹 Load loans
     const loadLoans = async () => {
         try {
             const data = await AsyncStorage.getItem("loanApplications");
@@ -64,124 +73,254 @@ export default function LoanListScreen({ navigation }: any) {
         setRefreshing(false);
     };
 
+    // 🔹 Navigate to Add Application
+    const handleAddNew = () => {
+        navigation.navigate("ApplicationForm");
+    };
+
+    // 🔹 Logout
     const handleLogout = () => {
         Alert.alert("Logout", "Are you sure you want to logout?", [
             { text: "Cancel", style: "cancel" },
             {
                 text: "Logout",
+                style: "destructive",
                 onPress: () => {
                     logout();
-                    navigation.navigate("Login");
+                    navigation.replace("Login");
                 },
             },
         ]);
     };
 
+    // 🔹 Clear all applications
     const clearAllData = () => {
-        Alert.alert("Clear All Data", "This will delete all loan applications. Continue?", [
-            { text: "Cancel", style: "cancel" },
-            {
-                text: "Delete All",
-                style: "destructive",
-                onPress: async () => {
-                    try {
-                        await AsyncStorage.removeItem("loanApplications");
-                        setLoans([]);
-                        Alert.alert("Success", "All data cleared");
-                    } catch (error) {
-                        Alert.alert("Error", "Failed to clear data");
-                    }
-                },
-            },
-        ]);
-    };
-
-    const handleViewPdf = async (paysheetUri: string | null | undefined, applicantName: string) => {
-        try {
-            if (!paysheetUri) {
-                Alert.alert("No File", "Paysheet not available for this application");
-                return;
-            }
-
-            // Check if file exists
-            const fileInfo = await FileSystem.getInfoAsync(paysheetUri);
-
-            if (!fileInfo.exists) {
-                Alert.alert("Error", "Paysheet file not found or has been deleted");
-                return;
-            }
-
-            // Set the PDF URI for modal view
-            setSelectedPdf(paysheetUri);
-            setPdfModalVisible(true);
-
-        } catch (error) {
-            console.error("PDF view error:", error);
-            Alert.alert("Error", "Failed to open paysheet file");
-        }
-    };
-
-    const handleDownloadPdf = async (paysheetUri: string | null | undefined, applicantName: string) => {
-        try {
-            if (!paysheetUri) {
-                Alert.alert("No File", "Paysheet not available for download");
-                return;
-            }
-
-            const fileInfo = await FileSystem.getInfoAsync(paysheetUri);
-
-            if (!fileInfo.exists) {
-                Alert.alert("Error", "Paysheet file not found");
-                return;
-            }
-
-            // Share the file
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(paysheetUri, {
-                    mimeType: 'application/pdf',
-                    dialogTitle: `${applicantName}'s Paysheet`,
-                    UTI: 'com.adobe.pdf'
-                });
-            } else {
-                Alert.alert("Error", "Sharing is not available on this device");
-            }
-        } catch (error) {
-            console.error("Download error:", error);
-            Alert.alert("Error", "Failed to download paysheet");
-        }
-    };
-
-    const handleDeletePdf = async (loanId: number | undefined, applicantName: string) => {
-        if (!loanId) {
-            Alert.alert("Error", "Invalid application ID");
+        if (loans.length === 0) {
+            Alert.alert("No Data", "There are no applications to delete");
             return;
         }
 
         Alert.alert(
-            "Delete Paysheet",
-            `Are you sure you want to delete ${applicantName}'s paysheet?`,
+            "Delete All Applications",
+            `This will permanently delete all ${loans.length} loan applications. This action cannot be undone.`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
-                    text: "Delete",
+                    text: "Delete All",
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            const updatedLoans = loans.map(loan =>
-                                loan.id === loanId
-                                    ? { ...loan, paysheetUri: null }
-                                    : loan
-                            );
-
-                            setLoans(updatedLoans);
-                            await AsyncStorage.setItem(
-                                "loanApplications",
-                                JSON.stringify(updatedLoans)
-                            );
-
-                            Alert.alert("Success", "Paysheet deleted successfully");
+                            await deleteAllApplications();
+                            await AsyncStorage.removeItem("loanApplications");
+                            await loadLoans();
+                            Alert.alert("Success", "All applications deleted successfully");
                         } catch (error) {
-                            console.error(error);
+                            console.error("Clear all error:", error);
+                            Alert.alert("Error", "Failed to delete applications");
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    // 🔹 SIMPLE PDF VIEWER - WORKING SOLUTION
+    const handleViewPdf = async (paysheetUri: string | null, applicantName: string) => {
+        try {
+            if (!paysheetUri) {
+                Alert.alert("No File", "No paysheet available for this application");
+                return;
+            }
+
+            console.log("📄 Attempting to open PDF:", paysheetUri);
+
+            if (Platform.OS === "web") {
+                // WEB SOLUTION - Simple and reliable
+                handleViewPdfWeb(paysheetUri, applicantName);
+            } else {
+                // MOBILE SOLUTION
+                handleViewPdfMobile(paysheetUri, applicantName);
+            }
+        } catch (error) {
+            console.error("Error viewing PDF:", error);
+            Alert.alert("Error", "Unable to open PDF file");
+        }
+    };
+
+    // 🔹 WEB PDF HANDLER - FIXED
+    const handleViewPdfWeb = (uri: string, applicantName: string) => {
+        console.log("🌐 Web PDF Handler - URI:", uri);
+
+        // Handle blob URLs - Convert to object URL
+        if (uri.startsWith('blob:')) {
+            console.log("🔧 Converting blob URL to object URL");
+
+            // Create a temporary anchor element for download
+            const link = document.createElement('a');
+            link.href = uri;
+            link.download = `${applicantName}_paysheet.pdf`;
+            link.target = '_blank';
+
+            // Append to body and click
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            Alert.alert("Download Started", "PDF download has been initiated. Please check your downloads folder.");
+            return;
+        }
+
+        // Handle file URLs - Show helpful message
+        if (uri.startsWith('file://')) {
+            Alert.alert(
+                "Local File",
+                "This is a local file. On web, please use the download option to save and view the PDF.",
+                [
+                    { text: "OK" },
+                    {
+                        text: "Download",
+                        onPress: () => handleDownloadPdfWeb(uri, applicantName)
+                    }
+                ]
+            );
+            return;
+        }
+
+        // For other URLs, try direct opening
+        try {
+            console.log("🔗 Opening URL directly:", uri);
+            const newWindow = window.open(uri, '_blank');
+            if (!newWindow) {
+                Alert.alert("Pop-up Blocked", "Please allow pop-ups for this site to view PDF files.");
+            }
+        } catch (error) {
+            console.error("Window open failed:", error);
+            Alert.alert("Error", "Could not open PDF. Try downloading instead.");
+        }
+    };
+
+    // 🔹 MOBILE PDF HANDLER - FIXED
+    const handleViewPdfMobile = async (uri: string, applicantName: string) => {
+        try {
+            console.log("📱 Mobile PDF Handler - URI:", uri);
+
+            let fixedUri = uri;
+
+            // Fix URI format for mobile
+            if (!uri.startsWith('file://') && !uri.startsWith('http') && !uri.startsWith('content://')) {
+                fixedUri = `file://${uri}`;
+            }
+
+            console.log("📱 Fixed URI:", fixedUri);
+
+            // Check if file exists (skip this check to avoid errors)
+            try {
+                const fileInfo = await FileSystem.getInfoAsync(fixedUri);
+                if (!fileInfo.exists) {
+                    Alert.alert("File Not Found", "The PDF file was not found.");
+                    return;
+                }
+            } catch (fileError) {
+                console.log("File check skipped, proceeding...");
+            }
+
+            // Use Sharing API (most reliable on mobile)
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(fixedUri, {
+                    mimeType: "application/pdf",
+                    dialogTitle: `${applicantName}'s Paysheet`,
+                    UTI: "com.adobe.pdf"
+                });
+            } else {
+                // Fallback to Linking
+                const canOpen = await Linking.canOpenURL(fixedUri);
+                if (canOpen) {
+                    await Linking.openURL(fixedUri);
+                } else {
+                    Alert.alert("Error", "Cannot open PDF on this device.");
+                }
+            }
+        } catch (error) {
+            console.error("Mobile PDF error:", error);
+            Alert.alert("Error", "Unable to open PDF file");
+        }
+    };
+
+    // 🔹 PDF DOWNLOAD - SIMPLE AND RELIABLE
+    const handleDownloadPdf = async (paysheetUri: string | null, applicantName: string) => {
+        try {
+            if (!paysheetUri) {
+                Alert.alert("No File", "No paysheet available for download");
+                return;
+            }
+
+            console.log("💾 Downloading PDF:", paysheetUri);
+
+            if (Platform.OS === "web") {
+                handleDownloadPdfWeb(paysheetUri, applicantName);
+            } else {
+                // Mobile - use sharing as download
+                if (await Sharing.isAvailableAsync()) {
+                    await Sharing.shareAsync(paysheetUri, {
+                        mimeType: "application/pdf",
+                        dialogTitle: `Download ${applicantName}'s Paysheet`,
+                        UTI: "com.adobe.pdf"
+                    });
+                } else {
+                    Alert.alert("Download Unavailable", "File download is not available on this device");
+                }
+            }
+        } catch (error) {
+            console.error("Download error:", error);
+            Alert.alert("Error", "Failed to download PDF");
+        }
+    };
+
+    // 🔹 WEB DOWNLOAD HANDLER
+    const handleDownloadPdfWeb = (uri: string, applicantName: string) => {
+        try {
+            const link = document.createElement('a');
+            link.href = uri;
+            link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
+            link.target = '_blank';
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            Alert.alert("Download Started", "PDF download has been initiated.");
+        } catch (error) {
+            console.error("Web download error:", error);
+            Alert.alert("Download Failed", "Unable to download PDF file");
+        }
+    };
+
+    // 🔹 Delete PDF only
+    const handleDeletePdf = async (loanId: number, applicantName: string) => {
+        Alert.alert(
+            "Delete Paysheet",
+            `Remove ${applicantName}'s paysheet document?`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete PDF",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            await deletePdfOnly(loanId);
+                            // Update AsyncStorage
+                            const storedData = await AsyncStorage.getItem("loanApplications");
+                            if (storedData) {
+                                const allLoans: LoanApplication[] = JSON.parse(storedData);
+                                const updatedLoans = allLoans.map((loan) =>
+                                    loan.id === loanId ? { ...loan, paysheetUri: null } : loan
+                                );
+                                await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
+                            }
+                            await loadLoans();
+                            Alert.alert("Success", "Paysheet removed successfully");
+                        } catch (error) {
+                            console.error("Delete PDF error:", error);
                             Alert.alert("Error", "Failed to delete paysheet");
                         }
                     },
@@ -190,22 +329,16 @@ export default function LoanListScreen({ navigation }: any) {
         );
     };
 
+    // 🔹 Edit Application
     const handleEdit = (loan: LoanApplication) => {
-        navigation.navigate("ApplicationForm", {
-            editMode: true,
-            loanData: loan
-        });
+        navigation.navigate("ApplicationForm", { editMode: true, loanData: loan });
     };
 
-    const handleDeleteApplication = (id: number | undefined, name: string) => {
-        if (!id) {
-            Alert.alert("Error", "Invalid application ID");
-            return;
-        }
-
+    // 🔹 Delete Application
+    const handleDeleteApplication = (id: number, name: string) => {
         Alert.alert(
             "Delete Application",
-            `Are you sure you want to delete ${name}'s loan application?`,
+            `Permanently delete ${name}'s loan application?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -213,16 +346,19 @@ export default function LoanListScreen({ navigation }: any) {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            const updatedLoans = loans.filter((loan) => loan.id !== id);
-                            setLoans(updatedLoans);
-                            await AsyncStorage.setItem(
-                                "loanApplications",
-                                JSON.stringify(updatedLoans)
-                            );
-                            Alert.alert("Success", "Loan application deleted successfully");
+                            await deleteApplication(id);
+                            // Update AsyncStorage
+                            const storedData = await AsyncStorage.getItem("loanApplications");
+                            if (storedData) {
+                                const allLoans: LoanApplication[] = JSON.parse(storedData);
+                                const updatedLoans = allLoans.filter((loan) => loan.id !== id);
+                                await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
+                            }
+                            await loadLoans();
+                            Alert.alert("Success", `${name}'s application has been removed`);
                         } catch (error) {
-                            console.error(error);
-                            Alert.alert("Error", "Failed to delete loan application");
+                            console.error("Delete application error:", error);
+                            Alert.alert("Error", "Failed to delete application");
                         }
                     },
                 },
@@ -230,94 +366,119 @@ export default function LoanListScreen({ navigation }: any) {
         );
     };
 
+    // 🔹 Render individual loan card
     const renderLoanItem = ({ item }: { item: LoanApplication }) => (
         <View style={styles.card}>
             <View style={styles.cardHeader}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.headerLeft}>
                     <Text style={styles.name}>{item.name}</Text>
-                    <Text style={styles.loanId}>ID: {item.id}</Text>
+                    <View style={styles.idBadge}>
+                        <Icon name="pound" size={12} color="#667eea" />
+                        <Text style={styles.loanId}>{item.id}</Text>
+                    </View>
                 </View>
                 <View style={styles.actionButtons}>
-                    <TouchableOpacity
-                        onPress={() => handleEdit(item)}
-                        style={styles.actionButton}
-                    >
-                        <Icon name="pencil" size={20} color="#667eea" />
+                    <TouchableOpacity onPress={() => handleEdit(item)} style={styles.editButton}>
+                        <Icon name="pencil" size={18} color="#667eea" />
                     </TouchableOpacity>
                     <TouchableOpacity
                         onPress={() => handleDeleteApplication(item.id, item.name)}
-                        style={styles.actionButton}
+                        style={styles.deleteButton}
                     >
-                        <Icon name="delete" size={20} color="#ef4444" />
+                        <Icon name="delete" size={18} color="#ef4444" />
                     </TouchableOpacity>
                 </View>
             </View>
 
             <View style={styles.details}>
                 <View style={styles.detailRow}>
-                    <Icon name="email" size={16} color="#666" />
+                    <View style={styles.iconCircle}>
+                        <Icon name="email" size={14} color="#667eea" />
+                    </View>
                     <Text style={styles.detailText}>{item.email}</Text>
                 </View>
 
                 <View style={styles.detailRow}>
-                    <Icon name="phone" size={16} color="#666" />
+                    <View style={styles.iconCircle}>
+                        <Icon name="phone" size={14} color="#10b981" />
+                    </View>
                     <Text style={styles.detailText}>{item.tel}</Text>
                 </View>
 
+
                 <View style={styles.detailRow}>
-                    <Icon name="briefcase" size={16} color="#666" />
+                    <View style={styles.iconCircle}>
+                        <Icon name="briefcase" size={14} color="#f59e0b" />
+                    </View>
                     <Text style={styles.detailText}>{item.occupation}</Text>
                 </View>
 
                 <View style={styles.detailRow}>
-                    <Icon name="cash" size={16} color="#666" />
-                    <Text style={styles.detailText}>
+                    <View style={styles.iconCircle}>
+                        <Icon name="cash" size={14} color="#8b5cf6" />
+                    </View>
+                    <Text style={[styles.detailText, styles.salaryText]}>
                         LKR {Number(item.salary).toLocaleString()}
                     </Text>
                 </View>
 
                 <View style={styles.detailRow}>
-                    <Icon name="calendar" size={16} color="#666" />
+                    <View style={styles.iconCircle}>
+                        <Icon name="calendar-clock" size={14} color="#6b7280" />
+                    </View>
                     <Text style={styles.detailText}>
-                        {item.submittedAt ? new Date(item.submittedAt).toLocaleString() : 'N/A'}
+                        {new Date(item.submittedAt).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                        })}
                     </Text>
                 </View>
+            </View>
 
-                {/* PDF Actions */}
-                <View style={styles.pdfActions}>
-                    {item.paysheetUri ? (
-                        <>
-                            <TouchableOpacity
-                                style={[styles.pdfButton, styles.viewButton]}
-                                onPress={() => handleViewPdf(item.paysheetUri, item.name)}
-                            >
-                                <Icon name="eye" size={18} color="#fff" />
-                                <Text style={styles.pdfButtonText}>View PDF</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.pdfButton, styles.downloadButton]}
-                                onPress={() => handleDownloadPdf(item.paysheetUri, item.name)}
-                            >
-                                <Icon name="download" size={18} color="#fff" />
-                                <Text style={styles.pdfButtonText}>Download</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[styles.pdfButton, styles.deleteButton]}
-                                onPress={() => handleDeletePdf(item.id, item.name)}
-                            >
-                                <Icon name="delete" size={18} color="#fff" />
-                                <Text style={styles.pdfButtonText}>Delete PDF</Text>
-                            </TouchableOpacity>
-                        </>
-                    ) : (
-                        <View style={styles.noPdfContainer}>
-                            <Icon name="file-remove" size={18} color="#a0aec0" />
-                            <Text style={styles.noPdfText}>No PDF attached</Text>
-                        </View>
-                    )}
+            {/* PDF Section */}
+            <View style={styles.pdfSection}>
+                <View style={styles.pdfHeader}>
+                    <Icon name="file-pdf-box" size={18} color="#e53e3e" />
+                    <Text style={styles.pdfHeaderText}>Paysheet Document</Text>
                 </View>
+
+                {item.paysheetUri ? (
+                    <View style={styles.pdfActions}>
+                        <TouchableOpacity
+                            style={[styles.pdfButton, styles.viewButton]}
+                            onPress={() => handleViewPdf(item.paysheetUri, item.name)}
+                        >
+                            <Icon name="eye" size={16} color="#fff" />
+                            <Text style={styles.pdfButtonText}>
+                                {Platform.OS === "web" ? "Open PDF" : "View PDF"}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.pdfButton, styles.downloadButton]}
+                            onPress={() => handleDownloadPdf(item.paysheetUri, item.name)}
+                        >
+                            <Icon name="download" size={16} color="#fff" />
+                            <Text style={styles.pdfButtonText}>Download</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.pdfButton, styles.removePdfButton]}
+                            onPress={() => handleDeletePdf(item.id, item.name)}
+                        >
+                            <Icon name="close-circle" size={16} color="#fff" />
+                            <Text style={styles.pdfButtonText}>Remove</Text>
+                        </TouchableOpacity>
+                    </View>
+                ) : (
+                    <View style={styles.noPdfContainer}>
+                        <Icon name="file-cancel-outline" size={20} color="#9ca3af" />
+                        <Text style={styles.noPdfText}>No document attached</Text>
+                    </View>
+                )}
             </View>
         </View>
     );
@@ -325,109 +486,126 @@ export default function LoanListScreen({ navigation }: any) {
     return (
         <View style={styles.container}>
             {/* Header */}
-            <View style={styles.header}>
-                <View>
-                    <Text style={styles.title}>Loan Applications</Text>
-                    <Text style={styles.subtitle}>Manager Dashboard</Text>
+            <View style={styles.headerGradient}>
+                <View style={styles.header}>
+                    <View>
+                        <Text style={styles.title}>Loan Manager</Text>
+                        <Text style={styles.subtitle}>Dashboard & Applications</Text>
+                    </View>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity style={styles.headerButton} onPress={onRefresh}>
+                            <Icon name="refresh" size={20} color="#667eea" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.headerButton} onPress={clearAllData}>
+                            <Icon name="delete-sweep" size={20} color="#ef4444" />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.headerButton} onPress={handleLogout}>
+                            <Icon name="logout" size={20} color="#667eea" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
-                <View style={styles.headerButtons}>
-                    <TouchableOpacity style={styles.iconButton} onPress={onRefresh}>
-                        <Icon name="refresh" size={24} color="#667eea" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconButton} onPress={clearAllData}>
-                        <Icon name="delete-sweep" size={24} color="#e53e3e" />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
-                        <Icon name="logout" size={24} color="#667eea" />
-                    </TouchableOpacity>
+
+                {/* Stats Cards */}
+                <View style={styles.statsContainer}>
+                    <View style={[styles.statCard, styles.statCardPrimary]}>
+                        <Icon name="file-document-multiple" size={24} color="#667eea" />
+                        <Text style={styles.statNumber}>{loans.length}</Text>
+                        <Text style={styles.statLabel}>Total</Text>
+                    </View>
+                    <View style={[styles.statCard, styles.statCardSuccess]}>
+                        <Icon name="file-pdf-box" size={24} color="#10b981" />
+                        <Text style={styles.statNumber}>
+                            {loans.filter((loan) => loan.paysheetUri).length}
+                        </Text>
+                        <Text style={styles.statLabel}>With PDF</Text>
+                    </View>
+                    <View style={[styles.statCard, styles.statCardWarning]}>
+                        <Icon name="cash-multiple" size={24} color="#f59e0b" />
+                        <Text style={styles.statNumber}>
+                            {loans.filter((loan) => loan.salary >= 50000).length}
+                        </Text>
+                        <Text style={styles.statLabel}>High Income</Text>
+                    </View>
                 </View>
             </View>
 
-            {/* Stats */}
-            <View style={styles.statsContainer}>
-                <View style={styles.statCard}>
-                    <Icon name="file-document-multiple" size={32} color="#667eea" />
-                    <Text style={styles.statNumber}>{loans.length}</Text>
-                    <Text style={styles.statLabel}>Total Applications</Text>
-                </View>
-                <View style={styles.statCard}>
-                    <Icon name="file-pdf-box" size={32} color="#10b981" />
-                    <Text style={styles.statNumber}>
-                        {loans.filter(loan => loan.paysheetUri).length}
-                    </Text>
-                    <Text style={styles.statLabel}>With PDF</Text>
-                </View>
-            </View>
+            {/* Add New Button */}
+            <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
+                <Icon name="plus-circle" size={22} color="#fff" />
+                <Text style={styles.addButtonText}>New Application</Text>
+            </TouchableOpacity>
 
             {/* Loan List */}
             {loans.length === 0 ? (
                 <View style={styles.emptyState}>
-                    <Icon name="file-remove" size={80} color="#ccc" />
-                    <Text style={styles.emptyText}>No loan applications found</Text>
-                    <Text style={styles.emptySubtext}>
-                        Applications will appear here once submitted
+                    <View style={styles.emptyIcon}>
+                        <Icon name="file-document-outline" size={64} color="#cbd5e0" />
+                    </View>
+                    <Text style={styles.emptyTitle}>No Applications Yet</Text>
+                    <Text style={styles.emptyText}>
+                        Start by adding a new loan application
                     </Text>
+                    <TouchableOpacity style={styles.emptyButton} onPress={handleAddNew}>
+                        <Icon name="plus" size={20} color="#667eea" />
+                        <Text style={styles.emptyButtonText}>Add First Application</Text>
+                    </TouchableOpacity>
                 </View>
             ) : (
                 <FlatList
                     data={loans}
-                    keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+                    keyExtractor={(item) => item.id.toString()}
                     renderItem={renderLoanItem}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                    }
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
                     contentContainerStyle={styles.listContent}
                     showsVerticalScrollIndicator={false}
                 />
             )}
 
-            {/* PDF View Modal */}
+            {/* PDF Modal */}
             <Modal
                 visible={pdfModalVisible}
                 animationType="slide"
                 presentationStyle="pageSheet"
+                onRequestClose={() => setPdfModalVisible(false)}
             >
                 <View style={styles.modalContainer}>
                     <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Paysheet PDF</Text>
+                        <Text style={styles.modalTitle}>Paysheet Document</Text>
                         <TouchableOpacity
                             onPress={() => setPdfModalVisible(false)}
                             style={styles.closeButton}
                         >
-                            <Icon name="close" size={24} color="#374151" />
+                            <Icon name="close-circle" size={28} color="#ef4444" />
                         </TouchableOpacity>
                     </View>
 
                     <ScrollView style={styles.modalContent}>
                         {selectedPdf ? (
                             <View style={styles.pdfInfo}>
-                                <Icon name="file-pdf-box" size={60} color="#e53e3e" />
+                                <Icon name="file-pdf-box" size={80} color="#e53e3e" />
+                                <Text style={styles.pdfInfoTitle}>PDF Ready</Text>
                                 <Text style={styles.pdfInfoText}>
-                                    PDF is available for viewing
-                                </Text>
-                                <Text style={styles.pdfInfoSubtext}>
-                                    Use the download button to save or share the PDF file
+                                    {selectedPdf.split("/").pop()}
                                 </Text>
 
                                 <TouchableOpacity
-                                    style={[styles.pdfButton, styles.downloadButton, { marginTop: 16 }]}
+                                    style={styles.modalShareButton}
                                     onPress={() => {
-                                        if (selectedPdf) {
-                                            const applicantName = loans.find(loan =>
-                                                loan.paysheetUri === selectedPdf
-                                            )?.name || 'Applicant';
-                                            handleDownloadPdf(selectedPdf, applicantName);
-                                        }
+                                        const applicantName = loans.find((loan) => loan.paysheetUri === selectedPdf)?.name || "Applicant";
+                                        handleDownloadPdf(selectedPdf, applicantName);
                                     }}
                                 >
-                                    <Icon name="download" size={20} color="#fff" />
-                                    <Text style={styles.pdfButtonText}>Download PDF</Text>
+                                    <Icon name="share-variant" size={20} color="#fff" />
+                                    <Text style={styles.modalShareButtonText}>Share Document</Text>
                                 </TouchableOpacity>
                             </View>
                         ) : (
                             <View style={styles.pdfInfo}>
-                                <Icon name="file-remove" size={60} color="#a0aec0" />
-                                <Text style={styles.pdfInfoText}>No PDF available</Text>
+                                <Icon name="file-remove" size={80} color="#9ca3af" />
+                                <Text style={styles.pdfInfoTitle}>No PDF Available</Text>
+                                <Text style={styles.pdfInfoText}>
+                                    The document may have been removed
+                                </Text>
                             </View>
                         )}
                     </ScrollView>
@@ -441,79 +619,109 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: "#f8fafc",
-        padding: 16,
+    },
+    headerGradient: {
+        backgroundColor: "#fff",
+        paddingTop: Platform.OS === "ios" ? 50 : 20,
+        paddingBottom: 20,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 5,
     },
     header: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        marginBottom: 20,
-        marginTop: 10,
+        paddingHorizontal: 16,
+        marginBottom: 16,
     },
     title: {
-        fontSize: 28,
+        fontSize: 26,
         fontWeight: "bold",
         color: "#1a202c",
     },
     subtitle: {
-        fontSize: 14,
+        fontSize: 13,
         color: "#718096",
         marginTop: 2,
     },
     headerButtons: {
         flexDirection: "row",
-        gap: 12,
+        gap: 8,
     },
-    iconButton: {
-        padding: 8,
-        borderRadius: 8,
-        backgroundColor: "#fff",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
+    headerButton: {
+        padding: 10,
+        borderRadius: 10,
+        backgroundColor: "#f7fafc",
     },
     statsContainer: {
         flexDirection: "row",
-        gap: 12,
-        marginBottom: 20,
+        gap: 10,
+        paddingHorizontal: 16,
     },
     statCard: {
         flex: 1,
-        backgroundColor: "#fff",
-        padding: 16,
+        padding: 12,
         borderRadius: 12,
         alignItems: "center",
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 3,
+    },
+    statCardPrimary: {
+        backgroundColor: "#ede9fe",
+    },
+    statCardSuccess: {
+        backgroundColor: "#d1fae5",
+    },
+    statCardWarning: {
+        backgroundColor: "#fef3c7",
     },
     statNumber: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: "bold",
-        color: "#667eea",
-        marginTop: 8,
-    },
-    statLabel: {
-        fontSize: 12,
-        color: "#718096",
+        color: "#1a202c",
         marginTop: 4,
     },
+    statLabel: {
+        fontSize: 11,
+        color: "#6b7280",
+        marginTop: 2,
+    },
+    addButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#667eea",
+        margin: 16,
+        padding: 14,
+        borderRadius: 12,
+        shadowColor: "#667eea",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    addButtonText: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "bold",
+        marginLeft: 8,
+    },
     listContent: {
+        paddingHorizontal: 16,
         paddingBottom: 20,
     },
     card: {
         backgroundColor: "#fff",
-        borderRadius: 12,
+        borderRadius: 16,
         padding: 16,
         marginBottom: 12,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
         elevation: 3,
     },
     cardHeader: {
@@ -523,53 +731,103 @@ const styles = StyleSheet.create({
         marginBottom: 12,
         paddingBottom: 12,
         borderBottomWidth: 1,
-        borderBottomColor: "#e2e8f0",
+        borderBottomColor: "#f3f4f6",
+    },
+    headerLeft: {
+        flex: 1,
     },
     name: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: "bold",
-        color: "#2d3748",
+        color: "#1a202c",
+        marginBottom: 6,
+    },
+    idBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#ede9fe",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        alignSelf: "flex-start",
+        gap: 4,
     },
     loanId: {
         fontSize: 12,
-        color: "#a0aec0",
-        marginTop: 2,
+        color: "#667eea",
+        fontWeight: "600",
     },
     actionButtons: {
         flexDirection: "row",
         gap: 8,
     },
-    actionButton: {
+    editButton: {
         padding: 8,
-        borderRadius: 6,
-        backgroundColor: "#f7fafc",
+        borderRadius: 8,
+        backgroundColor: "#ede9fe",
+    },
+    deleteButton: {
+        padding: 8,
+        borderRadius: 8,
+        backgroundColor: "#fee2e2",
     },
     details: {
         gap: 10,
+        marginBottom: 12,
     },
     detailRow: {
         flexDirection: "row",
         alignItems: "center",
-        gap: 8,
+        gap: 10,
+    },
+    iconCircle: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: "#f7fafc",
+        justifyContent: "center",
+        alignItems: "center",
     },
     detailText: {
         fontSize: 14,
-        color: "#4a5568",
+        color: "#4b5563",
         flex: 1,
+    },
+    salaryText: {
+        fontWeight: "600",
+        color: "#8b5cf6",
+    },
+    pdfSection: {
+        marginTop: 12,
+        padding: 12,
+        backgroundColor: "#fef2f2",
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#fecaca",
+    },
+    pdfHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 10,
+    },
+    pdfHeaderText: {
+        fontSize: 13,
+        fontWeight: "600",
+        color: "#991b1b",
     },
     pdfActions: {
         flexDirection: "row",
         gap: 8,
-        marginTop: 12,
-        flexWrap: "wrap",
     },
     pdfButton: {
+        flex: 1,
         flexDirection: "row",
         alignItems: "center",
+        justifyContent: "center",
         paddingVertical: 8,
-        paddingHorizontal: 12,
-        borderRadius: 6,
-        gap: 6,
+        borderRadius: 8,
+        gap: 4,
     },
     viewButton: {
         backgroundColor: "#667eea",
@@ -577,7 +835,7 @@ const styles = StyleSheet.create({
     downloadButton: {
         backgroundColor: "#10b981",
     },
-    deleteButton: {
+    removePdfButton: {
         backgroundColor: "#ef4444",
     },
     pdfButtonText: {
@@ -588,32 +846,60 @@ const styles = StyleSheet.create({
     noPdfContainer: {
         flexDirection: "row",
         alignItems: "center",
-        padding: 12,
-        backgroundColor: "#f7fafc",
+        justifyContent: "center",
+        padding: 10,
+        backgroundColor: "#fff",
         borderRadius: 8,
         gap: 8,
     },
     noPdfText: {
-        color: "#a0aec0",
-        fontSize: 14,
+        color: "#9ca3af",
+        fontSize: 13,
+        fontStyle: "italic",
     },
     emptyState: {
         flex: 1,
         justifyContent: "center",
         alignItems: "center",
         paddingVertical: 60,
+        paddingHorizontal: 32,
+    },
+    emptyIcon: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        backgroundColor: "#f3f4f6",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 20,
+    },
+    emptyTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        color: "#374151",
+        marginBottom: 8,
     },
     emptyText: {
-        fontSize: 18,
-        color: "#a0aec0",
-        marginTop: 16,
-        fontWeight: "600",
-    },
-    emptySubtext: {
         fontSize: 14,
-        color: "#cbd5e0",
-        marginTop: 8,
+        color: "#9ca3af",
         textAlign: "center",
+        marginBottom: 24,
+    },
+    emptyButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#fff",
+        paddingVertical: 12,
+        paddingHorizontal: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: "#667eea",
+        gap: 8,
+    },
+    emptyButtonText: {
+        color: "#667eea",
+        fontSize: 15,
+        fontWeight: "600",
     },
     modalContainer: {
         flex: 1,
@@ -625,7 +911,7 @@ const styles = StyleSheet.create({
         alignItems: "center",
         padding: 16,
         borderBottomWidth: 1,
-        borderBottomColor: "#e2e8f0",
+        borderBottomColor: "#f3f4f6",
     },
     modalTitle: {
         fontSize: 18,
@@ -641,19 +927,38 @@ const styles = StyleSheet.create({
     },
     pdfInfo: {
         alignItems: "center",
-        paddingVertical: 40,
+        paddingVertical: 60,
+    },
+    pdfInfoTitle: {
+        fontSize: 20,
+        fontWeight: "bold",
+        color: "#1a202c",
+        marginTop: 20,
     },
     pdfInfoText: {
-        fontSize: 18,
-        fontWeight: "600",
-        color: "#374151",
-        marginTop: 16,
-        textAlign: "center",
-    },
-    pdfInfoSubtext: {
         fontSize: 14,
         color: "#6b7280",
         marginTop: 8,
         textAlign: "center",
+    },
+    modalShareButton: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#10b981",
+        paddingVertical: 14,
+        paddingHorizontal: 32,
+        borderRadius: 12,
+        marginTop: 32,
+        gap: 8,
+        shadowColor: "#10b981",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
+    },
+    modalShareButtonText: {
+        color: "#fff",
+        fontSize: 16,
+        fontWeight: "bold",
     },
 });

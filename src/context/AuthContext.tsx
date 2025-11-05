@@ -1,3 +1,4 @@
+// context/AuthContext.tsx
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useState, useContext, useEffect, ReactNode } from "react";
 
@@ -16,7 +17,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const checkLogin = async () => {
             try {
                 const stored = await AsyncStorage.getItem("loggedIn");
-                if (stored === "true") setIsAuthenticated(true);
+                if (stored === "true") {
+                    setIsAuthenticated(true);
+                }
             } catch (error) {
                 console.error("Check login error:", error);
             }
@@ -25,19 +28,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     const login = async (username: string, password: string): Promise<boolean> => {
-        if (username.trim() === "manager" && password.trim() === "#mgr2025") {
-            setIsAuthenticated(true);
-            await AsyncStorage.setItem("loggedIn", "true");
-            await AsyncStorage.setItem("username", username);
-            return true;
+        try {
+            // Hardcoded credentials as per assignment requirement
+            // username: "manager", password: "mgr2025"
+            if (username.trim() === "manager" && password.trim() === "mgr2025") {
+                setIsAuthenticated(true);
+                await AsyncStorage.setItem("loggedIn", "true");
+                await AsyncStorage.setItem("username", username);
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            console.error("Login error:", error);
+            return false;
         }
-        return false;
     };
 
     const logout = async () => {
-        setIsAuthenticated(false);
-        await AsyncStorage.removeItem("loggedIn");
-        await AsyncStorage.removeItem("username");
+        try {
+            setIsAuthenticated(false);
+            await AsyncStorage.removeItem("loggedIn");
+            await AsyncStorage.removeItem("username");
+        } catch (error) {
+            console.error("Logout error:", error);
+        }
     };
 
     return (
@@ -46,7 +61,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         </AuthContext.Provider>
     );
 };
-
 
 export const useAuth = () => {
     const context = useContext(AuthContext);

@@ -124,10 +124,10 @@ export default function LoginScreen({ navigation }: Props) {
 
                             {/* Register navigation (optional) */}
                             <TouchableOpacity
-                                onPress={() => navigation.navigate("LoanForm")}
+                                onPress={() => navigation.navigate("ApplicationForm")}
                                 style={styles.linkContainer}
                             >
-                                <Text style={styles.linkText}>New user? Apply for a loan</Text>
+                                <Text style={styles.linkText}>New user? Fill Application Form</Text>
                             </TouchableOpacity>
                         </View>
                     </ScrollView>
