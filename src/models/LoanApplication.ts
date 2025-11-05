@@ -1,11 +1,11 @@
-// models/LoanApplication.ts
+
 export interface LoanApplication {
-    id?: number;
+    id: number;
     name: string;
     email: string;
     tel: string;
     occupation: string;
     salary: number;
-    paysheetUri?: string | null;
-    submittedAt?: string;
+    paysheetUri: string | null;
+    submittedAt: string;
 }

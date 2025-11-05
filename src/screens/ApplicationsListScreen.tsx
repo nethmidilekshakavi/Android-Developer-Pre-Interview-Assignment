@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from "react";
 import {
     View,
@@ -13,16 +14,8 @@ import {
     Platform,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { useAuth } from "../context/AuthContext";
-import {
-    getApplications,
-    deleteApplication,
-    deletePdfOnly,
-    deleteAllApplications,
-    initDB,
-} from "../db/db";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {LoanApplication} from "../models/LoanApplication";
 
@@ -39,14 +32,14 @@ export default function LoanListScreen({ navigation }: any) {
             const data = await AsyncStorage.getItem("loanApplications");
             if (data) {
                 const parsedData: LoanApplication[] = JSON.parse(data);
-                // Ensure all loans have proper IDs
+                // Better ID generation with proper unique IDs
                 const loansWithIds = parsedData.map((loan, index) => ({
                     ...loan,
-                    id: loan.id || index + 1,
+                    id: loan.id || Date.now() + index, // More unique ID
                     submittedAt: loan.submittedAt || new Date().toISOString()
                 }));
                 setLoans(loansWithIds);
-                console.log("Loaded loans:", loansWithIds.length);
+                console.log("Loaded loans with IDs:", loansWithIds.map(l => ({id: l.id, name: l.name})));
             } else {
                 setLoans([]);
             }
@@ -91,36 +84,6 @@ export default function LoanListScreen({ navigation }: any) {
                 },
             },
         ]);
-    };
-
-    // 🔹 Clear all applications - FIXED
-    const clearAllData = () => {
-        if (loans.length === 0) {
-            Alert.alert("No Data", "There are no applications to delete");
-            return;
-        }
-
-        Alert.alert(
-            "Delete All Applications",
-            `This will permanently delete all ${loans.length} loan applications. This action cannot be undone.`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Delete All",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await deleteAllApplications();
-                            await loadLoans(); // Reload the list after deletion
-                            Alert.alert("Success", "All applications deleted successfully");
-                        } catch (error) {
-                            console.error("Clear all error:", error);
-                            Alert.alert("Error", "Failed to delete applications");
-                        }
-                    },
-                },
-            ]
-        );
     };
 
     // 🔹 SIMPLE PDF VIEWER - FIXED VERSION
@@ -335,9 +298,16 @@ export default function LoanListScreen({ navigation }: any) {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            await deletePdfOnly(loanId);
-                            await loadLoans(); // Reload the list after deletion
-                            Alert.alert("Success", "Paysheet removed successfully");
+                            const storedData = await AsyncStorage.getItem("loanApplications");
+                            if (storedData) {
+                                const allLoans: LoanApplication[] = JSON.parse(storedData);
+                                const updatedLoans = allLoans.map((loan) =>
+                                    loan.id === loanId ? { ...loan, paysheetUri: null } : loan
+                                );
+                                await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
+                                setLoans(updatedLoans);
+                                Alert.alert("Success", "Paysheet removed successfully");
+                            }
                         } catch (error) {
                             console.error("Delete PDF error:", error);
                             Alert.alert("Error", "Failed to delete paysheet");
@@ -354,9 +324,31 @@ export default function LoanListScreen({ navigation }: any) {
     };
 
     const handleDeleteApplication = (id: number, name: string) => {
+        console.log("🔴 DELETE INITIATED:", {id, name});
+
+        // Auto-confirm for testing (remove this later)
+        console.log("AUTO-CONFIRMING DELETE FOR TESTING");
+
+        const updatedLoans = loans.filter(loan => loan.id !== id);
+
+        // Update storage immediately
+        AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans))
+            .then(() => {
+                // Update UI
+                setLoans(updatedLoans);
+                console.log("✅ DELETE COMPLETED - New count:", updatedLoans.length);
+                Alert.alert("Success", `${name}'s application has been deleted`);
+            })
+            .catch(error => {
+                console.error("❌ Delete error:", error);
+                Alert.alert("Error", "Delete failed");
+            });
+
+        // Remove the Alert.alert temporarily for testing
+
         Alert.alert(
             "Delete Application",
-            `Are you sure you want to permanently delete ${name}'s application?`,
+            `Delete ${name}'s application?`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -364,21 +356,49 @@ export default function LoanListScreen({ navigation }: any) {
                     style: "destructive",
                     onPress: async () => {
                         try {
-                            console.log("🗑️ Deleting application ID:", id);
-                            await deleteApplication(id);
-                            await loadLoans(); // refresh list
-                            Alert.alert("Success", `${name}'s application has been deleted`);
+                            await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
+                            setLoans(updatedLoans);
+                            console.log("✅ DELETE COMPLETED");
+                            Alert.alert("Success", "Application deleted");
                         } catch (error) {
-                            console.error("❌ Delete Error:", error);
-                            Alert.alert("Error", "Failed to delete the application");
+                            console.error("Delete error:", error);
+                            Alert.alert("Error", "Delete failed");
+                        }
+                    },
+                },
+            ]
+        );
+
+    };
+    const clearAllData = () => {
+        if (loans.length === 0) {
+            Alert.alert("No Data", "There are no applications to delete");
+            return;
+        }
+
+        Alert.alert(
+            "Delete All Applications",
+            `This will permanently delete all ${loans.length} loan applications. This action cannot be undone.`,
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Delete All",
+                    style: "destructive",
+                    onPress: async () => {
+                        try {
+                            // Direct AsyncStorage clearing
+                            await AsyncStorage.removeItem("loanApplications");
+                            setLoans([]);
+                            Alert.alert("Success", "All applications deleted successfully");
+                        } catch (error) {
+                            console.error("Clear all error:", error);
+                            Alert.alert("Error", "Failed to delete applications");
                         }
                     },
                 },
             ]
         );
     };
-
-    // 🔹 Render individual loan card
     // @ts-ignore
     const renderLoanItem = ({ item }: { item: LoanApplication }) => (
         <View style={styles.card}>
@@ -395,7 +415,14 @@ export default function LoanListScreen({ navigation }: any) {
                         <Icon name="pencil" size={18} color="#667eea" />
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onPress={() => handleDeleteApplication(item.id!, item.name)}
+                        onPress={() => {
+                            console.log("Delete button pressed for:", item.name, "ID:", item.id);
+                            if (item.id) {
+                                handleDeleteApplication(item.id, item.name);
+                            } else {
+                                Alert.alert("Error", "Application ID not found");
+                            }
+                        }}
                         style={styles.deleteButton}
                     >
                         <Icon name="delete" size={18} color="#ef4444" />
@@ -754,7 +781,7 @@ const styles = StyleSheet.create({
     idBadge: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#e0f2fe", // Professional light blue
+        backgroundColor: "#e0f2fe",
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 12,
@@ -763,7 +790,7 @@ const styles = StyleSheet.create({
     },
     loanId: {
         fontSize: 12,
-        color: "#0369a1", // Professional dark blue
+        color: "#0369a1",
         fontWeight: "600",
     },
     actionButtons: {
@@ -773,12 +800,12 @@ const styles = StyleSheet.create({
     editButton: {
         padding: 8,
         borderRadius: 8,
-        backgroundColor: "#e0f2fe", // Professional light blue
+        backgroundColor: "#e0f2fe",
     },
     deleteButton: {
         padding: 8,
         borderRadius: 8,
-        backgroundColor: "#fef2f2", // Professional light red
+        backgroundColor: "#fef2f2",
     },
     details: {
         gap: 10,
