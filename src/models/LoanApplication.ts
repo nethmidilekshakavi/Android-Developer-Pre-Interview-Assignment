@@ -1,3 +1,4 @@
+// models/LoanApplication.ts
 export interface LoanApplication {
     id?: number;
     name: string;
@@ -6,4 +7,5 @@ export interface LoanApplication {
     occupation: string;
     salary: number;
     paysheetUri?: string | null;
+    submittedAt?: string;
 }

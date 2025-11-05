@@ -25,7 +25,6 @@ import {
 } from "../db/db";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {LoanApplication} from "../models/LoanApplication";
-import {RouteProp, useNavigation, useRoute} from "@react-navigation/native";
 
 export default function LoanListScreen({ navigation }: any) {
     const [loans, setLoans] = useState<LoanApplication[]>([]);
@@ -34,9 +33,6 @@ export default function LoanListScreen({ navigation }: any) {
     const [pdfModalVisible, setPdfModalVisible] = useState(false);
     const { logout } = useAuth();
 
-    const route = useRoute<PdfViewScreenRouteProp>();
-    const navigation = useNavigation();
-    const { pdfUri, applicantName } = route.params;
     // 🔹 Load loans
     const loadLoans = async () => {
         try {
@@ -128,7 +124,7 @@ export default function LoanListScreen({ navigation }: any) {
         );
     };
 
-    // 🔹 SIMPLE PDF VIEWER - WORKING SOLUTION
+    // 🔹 SIMPLE PDF VIEWER - FIXED VERSION
     const handleViewPdf = async (paysheetUri: string | null, applicantName: string) => {
         try {
             if (!paysheetUri) {
@@ -136,13 +132,13 @@ export default function LoanListScreen({ navigation }: any) {
                 return;
             }
 
-            console.log("📄 Attempting to open PDF:", paysheetUri);
+            console.log("📄 Opening PDF for viewing:", paysheetUri);
 
             if (Platform.OS === "web") {
-                // WEB SOLUTION - Simple and reliable
+                // WEB SOLUTION - Open in new tab for viewing only
                 handleViewPdfWeb(paysheetUri, applicantName);
             } else {
-                // MOBILE SOLUTION
+                // MOBILE SOLUTION - Navigate to PDF view screen
                 handleViewPdfMobile(paysheetUri, applicantName);
             }
         } catch (error) {
@@ -151,26 +147,21 @@ export default function LoanListScreen({ navigation }: any) {
         }
     };
 
-    // 🔹 WEB PDF HANDLER - FIXED
+    // 🔹 WEB PDF VIEWER - FIXED (ONLY VIEW, NO DOWNLOAD)
     const handleViewPdfWeb = (uri: string, applicantName: string) => {
-        console.log("🌐 Web PDF Handler - URI:", uri);
+        console.log("🌐 Web PDF Viewer - URI:", uri);
 
-        // Handle blob URLs - Convert to object URL
+        // Handle blob URLs - Open in new tab for viewing
         if (uri.startsWith('blob:')) {
-            console.log("🔧 Converting blob URL to object URL");
+            console.log("🔧 Opening blob URL in new tab for viewing");
 
-            // Create a temporary anchor element for download
-            const link = document.createElement('a');
-            link.href = uri;
-            link.download = `${applicantName}_paysheet.pdf`;
-            link.target = '_blank';
-
-            // Append to body and click
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-
-            Alert.alert("Download Started", "PDF download has been initiated. Please check your downloads folder.");
+            // Simply open in new tab without download attributes
+            const newWindow = window.open(uri, '_blank');
+            if (!newWindow) {
+                Alert.alert("Pop-up Blocked", "Please allow pop-ups for this site to view PDF files.");
+            } else {
+                Alert.alert("PDF Opened", `${applicantName}'s PDF opened in new tab for viewing.`);
+            }
             return;
         }
 
@@ -190,12 +181,14 @@ export default function LoanListScreen({ navigation }: any) {
             return;
         }
 
-        // For other URLs, try direct opening
+        // For other URLs, try direct opening in new tab
         try {
-            console.log("🔗 Opening URL directly:", uri);
+            console.log("🔗 Opening URL directly in new tab:", uri);
             const newWindow = window.open(uri, '_blank');
             if (!newWindow) {
                 Alert.alert("Pop-up Blocked", "Please allow pop-ups for this site to view PDF files.");
+            } else {
+                Alert.alert("PDF Opened", `${applicantName}'s PDF opened in new tab for viewing.`);
             }
         } catch (error) {
             console.error("Window open failed:", error);
@@ -203,10 +196,10 @@ export default function LoanListScreen({ navigation }: any) {
         }
     };
 
-    // 🔹 MOBILE PDF HANDLER - FIXED
+    // 🔹 MOBILE PDF VIEWER - FIXED
     const handleViewPdfMobile = async (uri: string, applicantName: string) => {
         try {
-            console.log("📱 Mobile PDF Handler - URI:", uri);
+            console.log("📱 Mobile PDF Viewer - URI:", uri);
 
             let fixedUri = uri;
 
@@ -217,40 +210,19 @@ export default function LoanListScreen({ navigation }: any) {
 
             console.log("📱 Fixed URI:", fixedUri);
 
-            // Check if file exists (skip this check to avoid errors)
-            try {
-                const fileInfo = await FileSystem.getInfoAsync(fixedUri);
-                if (!fileInfo.exists) {
-                    Alert.alert("File Not Found", "The PDF file was not found.");
-                    return;
-                }
-            } catch (fileError) {
-                console.log("File check skipped, proceeding...");
-            }
+            // Navigate to PDF View Screen (for viewing only)
+            navigation.navigate("PdfView", {
+                pdfUri: fixedUri,
+                applicantName: applicantName,
+            });
 
-            // Use Sharing API (most reliable on mobile)
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(fixedUri, {
-                    mimeType: "application/pdf",
-                    dialogTitle: `${applicantName}'s Paysheet`,
-                    UTI: "com.adobe.pdf"
-                });
-            } else {
-                // Fallback to Linking
-                const canOpen = await Linking.canOpenURL(fixedUri);
-                if (canOpen) {
-                    await Linking.openURL(fixedUri);
-                } else {
-                    Alert.alert("Error", "Cannot open PDF on this device.");
-                }
-            }
         } catch (error) {
             console.error("Mobile PDF error:", error);
             Alert.alert("Error", "Unable to open PDF file");
         }
     };
 
-    // 🔹 PDF DOWNLOAD - SIMPLE AND RELIABLE
+    // 🔹 PDF DOWNLOAD - SEPARATE FUNCTION FOR DOWNLOADING
     const handleDownloadPdf = async (paysheetUri: string | null, applicantName: string) => {
         try {
             if (!paysheetUri) {
@@ -280,9 +252,30 @@ export default function LoanListScreen({ navigation }: any) {
         }
     };
 
-    // 🔹 WEB DOWNLOAD HANDLER
+    // 🔹 WEB DOWNLOAD HANDLER - SEPARATE FROM VIEW
     const handleDownloadPdfWeb = (uri: string, applicantName: string) => {
         try {
+            console.log("🌐 Web PDF Download - URI:", uri);
+
+            // Handle blob URLs - Force download
+            if (uri.startsWith('blob:')) {
+                console.log("🔧 Downloading blob URL");
+
+                // Create a temporary anchor element for download
+                const link = document.createElement('a');
+                link.href = uri;
+                link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
+                link.target = '_blank';
+
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                Alert.alert("Download Started", "PDF download has been initiated. Please check your downloads folder.");
+                return;
+            }
+
+            // For other URLs, create download link
             const link = document.createElement('a');
             link.href = uri;
             link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
@@ -370,127 +363,6 @@ export default function LoanListScreen({ navigation }: any) {
         );
     };
 
-    type PdfViewScreenRouteProp = RouteProp<{
-        PdfView: {
-            pdfUri: string;
-            applicantName: string;
-        };
-    }, 'PdfView'>;
-
-
-        const handleDownload = async () => {
-            try {
-                if (Platform.OS === 'web') {
-                    // Web download
-                    const link = document.createElement('a');
-                    link.href = pdfUri;
-                    link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
-                    link.target = '_blank';
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    Alert.alert('Download Started', 'PDF download has been initiated.');
-                } else {
-                    // Mobile download/share
-                    if (await Sharing.isAvailableAsync()) {
-                        await Sharing.shareAsync(pdfUri, {
-                            mimeType: 'application/pdf',
-                            dialogTitle: `Download ${applicantName}'s Paysheet`,
-                            UTI: 'com.adobe.pdf',
-                        });
-                    } else {
-                        Alert.alert('Download Unavailable', 'File download is not available on this device');
-                    }
-                }
-            } catch (error) {
-                console.error('Download error:', error);
-                Alert.alert('Error', 'Failed to download PDF');
-            }
-        };
-
-        const handleOpenExternal = async () => {
-            try {
-                const canOpen = await Linking.canOpenURL(pdfUri);
-                if (canOpen) {
-                    await Linking.openURL(pdfUri);
-                } else {
-                    Alert.alert('Error', 'Cannot open PDF on this device.');
-                }
-            } catch (error) {
-                console.error('Open external error:', error);
-                Alert.alert('Error', 'Unable to open PDF file');
-            }
-        };
-
-        // Fix URI for WebView
-        const getFixedUri = () => {
-            if (Platform.OS === 'ios' || Platform.OS === 'android') {
-                // For mobile, use the URI directly
-                return pdfUri;
-            } else {
-                // For web, use Google Docs viewer or direct link
-                return `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUri)}`;
-            }
-        };
-
-        return (
-            <View style={styles.container}>
-                {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        onPress={() => navigation.goBack()}
-                        style={styles.backButton}
-                    >
-                        <Icon name="arrow-left" size={24} color="#667eea" />
-                    </TouchableOpacity>
-                    <Text style={styles.title} numberOfLines={1}>
-                        {applicantName}'s Paysheet
-                    </Text>
-                    <View style={styles.headerButtons}>
-                        <TouchableOpacity onPress={handleDownload} style={styles.headerButton}>
-                            <Icon name="download" size={22} color="#667eea" />
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={handleOpenExternal} style={styles.headerButton}>
-                            <Icon name="open-in-new" size={22} color="#667eea" />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* PDF Content */}
-                <View style={styles.pdfContainer}>
-                    {Platform.OS === 'web' ? (
-                        // Web PDF Viewer
-                        <iframe
-                            src={getFixedUri()}
-                            style={styles.webView}
-                            title={`PDF - ${applicantName}`}
-                            width="100%"
-                            height="100%"
-                        />
-                    ) : (
-                        // Mobile PDF Viewer
-                        <WebView
-                            source={{ uri: getFixedUri() }}
-                            style={styles.webView}
-                            startInLoadingState={true}
-                            scalesPageToFit={true}
-                        />
-                    )}
-                </View>
-
-                {/* Loading/Error State */}
-                {!pdfUri && (
-                    <View style={styles.errorContainer}>
-                        <Icon name="file-remove" size={80} color="#9ca3af" />
-                        <Text style={styles.errorTitle}>PDF Not Available</Text>
-                        <Text style={styles.errorText}>
-                            The PDF file could not be loaded. It may have been moved or deleted.
-                        </Text>
-                    </View>
-                )}
-            </View>
-        );
-    }
     // 🔹 Render individual loan card
     const renderLoanItem = ({ item }: { item: LoanApplication }) => (
         <View style={styles.card}>
@@ -572,16 +444,18 @@ export default function LoanListScreen({ navigation }: any) {
 
                 {item.paysheetUri ? (
                     <View style={styles.pdfActions}>
+                        {/* VIEW PDF BUTTON - ONLY FOR VIEWING */}
                         <TouchableOpacity
                             style={[styles.pdfButton, styles.viewButton]}
                             onPress={() => handleViewPdf(item.paysheetUri, item.name)}
                         >
                             <Icon name="eye" size={16} color="#fff" />
                             <Text style={styles.pdfButtonText}>
-                                {Platform.OS === "web" ? "Open PDF" : "View PDF"}
+                                {Platform.OS === "web" ? "View PDF" : "View PDF"}
                             </Text>
                         </TouchableOpacity>
 
+                        {/* DOWNLOAD PDF BUTTON - ONLY FOR DOWNLOADING */}
                         <TouchableOpacity
                             style={[styles.pdfButton, styles.downloadButton]}
                             onPress={() => handleDownloadPdf(item.paysheetUri, item.name)}
