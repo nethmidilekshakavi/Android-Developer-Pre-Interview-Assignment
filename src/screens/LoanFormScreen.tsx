@@ -10,6 +10,7 @@ import {
     ScrollView,
     ActivityIndicator,
     Alert,
+    StatusBar,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -48,10 +49,7 @@ export default function LoanFormScreen({ navigation, route }: Props) {
             setTel(loanData.tel || "");
             setOccupation(loanData.occupation || "");
             setSalary(loanData.salary?.toString() || "");
-
-            // Note: Password is not stored for security reasons in edit mode
-            // You might want to handle this differently
-            setPassword(""); // Reset password field
+            setPassword("");
 
             if (loanData.paysheetUri) {
                 setPdfFile({
@@ -87,7 +85,6 @@ export default function LoanFormScreen({ navigation, route }: Props) {
     };
 
     const handleSubmit = async () => {
-        // Validation
         if (!name.trim()) {
             Toast.show({ type: "error", text1: "Enter your name" });
             return;
@@ -117,7 +114,6 @@ export default function LoanFormScreen({ navigation, route }: Props) {
             return;
         }
 
-        // Password validation only for new applications
         if (!isEditMode) {
             if (!password.trim()) {
                 Toast.show({ type: "error", text1: "Enter password" });
@@ -141,7 +137,6 @@ export default function LoanFormScreen({ navigation, route }: Props) {
             const existingLoans: LoanApplication[] = existingLoansJson ? JSON.parse(existingLoansJson) : [];
 
             if (isEditMode && editId) {
-                // Update existing application
                 const updatedLoans = existingLoans.map(loan =>
                     loan.id === editId
                         ? {
@@ -152,7 +147,6 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                             occupation,
                             salary: Number(salary),
                             paysheetUri: pdfFile?.uri || loan.paysheetUri,
-                            // Note: Password is not updated in edit mode for security
                         }
                         : loan
                 );
@@ -164,12 +158,10 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                     text1: "Application updated successfully!",
                 });
 
-                // Navigate back to loan list after 1.5 seconds
                 setTimeout(() => {
                     navigation.navigate("ApplicationsList");
                 }, 1500);
             } else {
-                // Create new application
                 const newLoan: LoanApplication = {
                     id: Date.now(),
                     name,
@@ -189,7 +181,6 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                     text1: "Application submitted successfully!",
                 });
 
-                // Reset form
                 setName("");
                 setEmail("");
                 setTel("");
@@ -198,7 +189,6 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                 setPassword("");
                 setPdfFile(null);
 
-                // Navigate to Login after 2 seconds
                 setTimeout(() => {
                     navigation.navigate("Login");
                 }, 2000);
@@ -254,191 +244,274 @@ export default function LoanFormScreen({ navigation, route }: Props) {
     };
 
     return (
-        <>
-            <LinearGradient colors={["#10b981", "#059669", "#047857"]} style={styles.gradient}>
-                <KeyboardAvoidingView
-                    behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    style={styles.container}
+        <View style={styles.mainContainer}>
+            <StatusBar barStyle="light-content" backgroundColor="#047857" />
+
+            {/* Professional Header Bar */}
+            <View style={styles.headerBar}>
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    style={styles.backButton}
+                    activeOpacity={0.7}
                 >
-                    <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-                        {/* Header */}
-                        <View style={styles.header}>
-                            <View style={styles.iconContainer}>
-                                <Icon
-                                    name={isEditMode ? "file-document-edit" : "file-document-plus"}
-                                    size={80}
-                                    color="#fff"
-                                />
+                    <Icon name="arrow-left" size={24} color="#fff" />
+                </TouchableOpacity>
+                <View style={styles.headerContent}>
+                    <Text style={styles.headerTitle}>
+                        {isEditMode ? "Edit Application" : "New Application"}
+                    </Text>
+                    <Text style={styles.headerSubtitle}>
+                        {isEditMode ? "Update loan details" : "Personal Loan Application"}
+                    </Text>
+                </View>
+                <View style={styles.headerRight} />
+            </View>
+
+            <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                style={styles.container}
+            >
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {/* Professional Card Container */}
+                    <View style={styles.formCard}>
+                        {/* Progress Indicator */}
+                        <View style={styles.progressSection}>
+                            <View style={styles.progressBar}>
+                                <View style={[styles.progressFill, { width: '33%' }]} />
                             </View>
-                            <Text style={styles.title}>
-                                {isEditMode ? "Edit Application" : "Loan Application"}
-                            </Text>
-                            <Text style={styles.subtitle}>
-                                {isEditMode ? "Update your loan application details" : "Fill in your details to apply for a loan"}
-                            </Text>
+                            <Text style={styles.progressText}>Step 1 of 3 - Personal Information</Text>
                         </View>
 
-                        {/* Form */}
-                        <View style={styles.card}>
+                        {/* Section: Personal Details */}
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <Icon name="account-circle" size={24} color="#047857" />
+                                <Text style={styles.sectionTitle}>Personal Details</Text>
+                            </View>
+
                             <InputField
                                 icon="account"
-                                label="Full Name *"
+                                label="Full Name"
                                 value={name}
                                 onChange={setName}
-                                placeholder="John Doe"
+                                placeholder="Enter your full name"
+                                required
                             />
                             <InputField
                                 icon="email"
-                                label="Email *"
+                                label="Email Address"
                                 value={email}
                                 onChange={setEmail}
-                                placeholder="john@example.com"
+                                placeholder="your.email@example.com"
                                 keyboardType="email-address"
+                                required
                             />
                             <InputField
                                 icon="phone"
-                                label="Telephone *"
+                                label="Phone Number"
                                 value={tel}
                                 onChange={setTel}
-                                placeholder="+94771234567"
+                                placeholder="+94 77 123 4567"
                                 keyboardType="phone-pad"
+                                required
                             />
+                        </View>
+
+                        {/* Divider */}
+                        <View style={styles.divider} />
+
+                        {/* Section: Employment Details */}
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <Icon name="briefcase" size={24} color="#047857" />
+                                <Text style={styles.sectionTitle}>Employment Details</Text>
+                            </View>
+
                             <InputField
-                                icon="briefcase"
-                                label="Occupation *"
+                                icon="briefcase-outline"
+                                label="Occupation"
                                 value={occupation}
                                 onChange={setOccupation}
-                                placeholder="Software Engineer"
+                                placeholder="e.g., Software Engineer"
+                                required
                             />
                             <InputField
-                                icon="cash"
-                                label="Monthly Salary (LKR) *"
+                                icon="currency-usd"
+                                label="Monthly Salary"
                                 value={salary}
                                 onChange={setSalary}
-                                placeholder="150000"
+                                placeholder="150,000"
                                 keyboardType="numeric"
+                                required
+                                prefix="LKR"
                             />
+                        </View>
 
-                            {/* Password field only for new applications */}
-                            {!isEditMode && (
-                                <PasswordField
-                                    label="Password *"
-                                    value={password}
-                                    onChange={setPassword}
-                                    show={showPassword}
-                                    toggleShow={() => setShowPassword(!showPassword)}
-                                />
+                        {/* Divider */}
+                        <View style={styles.divider} />
+
+                        {/* Section: Security */}
+                        {!isEditMode && (
+                            <>
+                                <View style={styles.section}>
+                                    <View style={styles.sectionHeader}>
+                                        <Icon name="shield-lock" size={24} color="#047857" />
+                                        <Text style={styles.sectionTitle}>Security</Text>
+                                    </View>
+
+                                    <PasswordField
+                                        label="Create Password"
+                                        value={password}
+                                        onChange={setPassword}
+                                        show={showPassword}
+                                        toggleShow={() => setShowPassword(!showPassword)}
+                                    />
+                                    <Text style={styles.passwordHint}>
+                                        <Icon name="information" size={14} color="#6b7280" />
+                                        {" "}Minimum 4 characters required
+                                    </Text>
+                                </View>
+                                <View style={styles.divider} />
+                            </>
+                        )}
+
+                        {/* Section: Document Upload */}
+                        <View style={styles.section}>
+                            <View style={styles.sectionHeader}>
+                                <Icon name="file-document" size={24} color="#047857" />
+                                <Text style={styles.sectionTitle}>Supporting Documents</Text>
+                            </View>
+
+                            <Text style={styles.uploadLabel}>
+                                Paysheet Document {!isEditMode && <Text style={styles.required}>*</Text>}
+                            </Text>
+
+                            <TouchableOpacity
+                                style={[styles.uploadBox, pdfFile && styles.uploadBoxActive]}
+                                onPress={pickDocument}
+                                disabled={isLoading}
+                                activeOpacity={0.7}
+                            >
+                                <View style={[styles.uploadIcon, pdfFile && styles.uploadIconActive]}>
+                                    <Icon
+                                        name={pdfFile ? "check-circle" : "cloud-upload"}
+                                        size={32}
+                                        color={pdfFile ? "#047857" : "#9CA3AF"}
+                                    />
+                                </View>
+                                <Text style={pdfFile ? styles.uploadedText : styles.uploadPrompt}>
+                                    {pdfFile ? pdfFile.name : "Click to upload PDF document"}
+                                </Text>
+                                <Text style={styles.uploadHint}>
+                                    {isEditMode
+                                        ? "Upload a new file to replace existing document"
+                                        : "PDF format only • Max 10MB"}
+                                </Text>
+                            </TouchableOpacity>
+
+                            {isEditMode && !pdfFile && (
+                                <View style={styles.infoBox}>
+                                    <Icon name="information" size={16} color="#0369a1" />
+                                    <Text style={styles.infoText}>
+                                        Your current document will be retained if no new file is selected
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+
+                    {/* Action Buttons - Fixed at bottom */}
+                    <View style={styles.actionSection}>
+                        <View style={styles.buttonContainer}>
+                            {isEditMode && (
+                                <TouchableOpacity
+                                    style={[styles.actionButton, styles.cancelBtn]}
+                                    onPress={handleCancelEdit}
+                                    disabled={isLoading}
+                                    activeOpacity={0.8}
+                                >
+                                    <Icon name="close-circle-outline" size={20} color="#dc2626" />
+                                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                                </TouchableOpacity>
                             )}
 
-                            {/* PDF Upload */}
-                            <View style={styles.inputWrapper}>
-                                <Text style={styles.label}>
-                                    Upload Paysheet (PDF) {!isEditMode && "*"}
-                                </Text>
-                                <TouchableOpacity
-                                    style={styles.uploadContainer}
-                                    onPress={pickDocument}
-                                    disabled={isLoading}
-                                >
-                                    <Icon
-                                        name={pdfFile ? "file-check" : "file-upload"}
-                                        size={40}
-                                        color={pdfFile ? "#10b981" : "#9CA3AF"}
-                                    />
-                                    <View style={styles.uploadTextContainer}>
-                                        <Text style={pdfFile ? styles.uploadTextSuccess : styles.uploadText}>
-                                            {pdfFile ? pdfFile.name : "Click to upload PDF"}
-                                        </Text>
-                                        <Text style={styles.uploadSubtext}>
-                                            {isEditMode ? "Select new file to replace existing PDF" : "Required for new applications"}
-                                        </Text>
-                                    </View>
-                                </TouchableOpacity>
-                                {isEditMode && !pdfFile && (
-                                    <Text style={styles.helpText}>
-                                        Current PDF will be kept if no new file is selected
-                                    </Text>
-                                )}
-                            </View>
-
-                            {/* Action Buttons */}
-                            <View style={styles.buttonRow}>
-                                {isEditMode && (
-                                    <TouchableOpacity
-                                        style={[styles.button, styles.cancelButton]}
-                                        onPress={handleCancelEdit}
-                                        disabled={isLoading}
-                                    >
-                                        <Icon name="close" size={20} color="#ef4444" />
-                                        <Text style={styles.cancelButtonText}>Cancel</Text>
-                                    </TouchableOpacity>
-                                )}
-
-                                <TouchableOpacity
-                                    style={[styles.button, styles.clearButton]}
-                                    onPress={clearForm}
-                                    disabled={isLoading}
-                                >
-                                    <Icon name="broom" size={20} color="#6b7280" />
-                                    <Text style={styles.clearButtonText}>Clear</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[
-                                        styles.button,
-                                        styles.submitButton,
-                                        isLoading && styles.submitButtonDisabled
-                                    ]}
-                                    onPress={handleSubmit}
-                                    disabled={isLoading}
-                                >
-                                    <LinearGradient
-                                        colors={["#10b981", "#059669"]}
-                                        style={styles.buttonGradient}
-                                    >
-                                        {isLoading ? (
-                                            <ActivityIndicator color="#fff" />
-                                        ) : (
-                                            <>
-                                                <Icon
-                                                    name={isEditMode ? "check-circle" : "send"}
-                                                    size={20}
-                                                    color="#fff"
-                                                    style={{ marginRight: 8 }}
-                                                />
-                                                <Text style={styles.buttonText}>
-                                                    {isEditMode ? "Update Application" : "Submit Application"}
-                                                </Text>
-                                            </>
-                                        )}
-                                    </LinearGradient>
-                                </TouchableOpacity>
-                            </View>
+                            <TouchableOpacity
+                                style={[styles.actionButton, styles.clearBtn]}
+                                onPress={clearForm}
+                                disabled={isLoading}
+                                activeOpacity={0.8}
+                            >
+                                <Icon name="refresh" size={20} color="#4b5563" />
+                                <Text style={styles.clearBtnText}>Reset</Text>
+                            </TouchableOpacity>
                         </View>
-                    </ScrollView>
-                </KeyboardAvoidingView>
-            </LinearGradient>
 
-            {/* Toast Container */}
+                        <TouchableOpacity
+                            style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
+                            onPress={handleSubmit}
+                            disabled={isLoading}
+                            activeOpacity={0.9}
+                        >
+                            <LinearGradient
+                                colors={["#059669", "#047857", "#065f46"]}
+                                style={styles.submitGradient}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                            >
+                                {isLoading ? (
+                                    <ActivityIndicator color="#fff" size="small" />
+                                ) : (
+                                    <>
+                                        <Icon
+                                            name={isEditMode ? "check-bold" : "send"}
+                                            size={22}
+                                            color="#fff"
+                                        />
+                                        <Text style={styles.submitBtnText}>
+                                            {isEditMode ? "Update Application" : "Submit Application"}
+                                        </Text>
+                                    </>
+                                )}
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                </ScrollView>
+            </KeyboardAvoidingView>
+
             <Toast />
-        </>
+        </View>
     );
 }
 
-/** Input components **/
-function InputField({ icon, label, value, onChange, placeholder, keyboardType }: any) {
+/** Input Components **/
+function InputField({ icon, label, value, onChange, placeholder, keyboardType, required, prefix }: any) {
+    const [isFocused, setIsFocused] = useState(false);
+
     return (
         <View style={styles.inputWrapper}>
-            <Text style={styles.label}>{label}</Text>
-            <View style={styles.inputContainer}>
-                <Icon name={icon} size={20} color="#9CA3AF" style={styles.inputIcon} />
+            <Text style={styles.inputLabel}>
+                {label} {required && <Text style={styles.required}>*</Text>}
+            </Text>
+            <View style={[
+                styles.inputContainer,
+                isFocused && styles.inputContainerFocused
+            ]}>
+                <View style={styles.inputIconWrapper}>
+                    <Icon name={icon} size={20} color={isFocused ? "#047857" : "#9CA3AF"} />
+                </View>
+                {prefix && <Text style={styles.inputPrefix}>{prefix}</Text>}
                 <TextInput
                     placeholder={placeholder}
                     placeholderTextColor="#9CA3AF"
-                    style={styles.input}
+                    style={styles.textInput}
                     value={value}
                     onChangeText={onChange}
                     keyboardType={keyboardType || "default"}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
                 />
             </View>
         </View>
@@ -446,21 +519,36 @@ function InputField({ icon, label, value, onChange, placeholder, keyboardType }:
 }
 
 function PasswordField({ label, value, onChange, show, toggleShow }: any) {
+    const [isFocused, setIsFocused] = useState(false);
+
     return (
         <View style={styles.inputWrapper}>
-            <Text style={styles.label}>{label}</Text>
-            <View style={styles.inputContainer}>
-                <Icon name="lock" size={20} color="#9CA3AF" style={styles.inputIcon} />
+            <Text style={styles.inputLabel}>
+                {label} <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={[
+                styles.inputContainer,
+                isFocused && styles.inputContainerFocused
+            ]}>
+                <View style={styles.inputIconWrapper}>
+                    <Icon name="lock-outline" size={20} color={isFocused ? "#047857" : "#9CA3AF"} />
+                </View>
                 <TextInput
-                    placeholder="••••••••"
+                    placeholder="Enter password"
                     placeholderTextColor="#9CA3AF"
-                    style={[styles.input, { flex: 1 }]}
+                    style={[styles.textInput, { flex: 1 }]}
                     secureTextEntry={!show}
                     value={value}
                     onChangeText={onChange}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
                 />
-                <TouchableOpacity onPress={toggleShow} style={styles.eyeIcon}>
-                    <Icon name={show ? "eye-off" : "eye"} size={20} color="#9CA3AF" />
+                <TouchableOpacity onPress={toggleShow} style={styles.eyeButton}>
+                    <Icon
+                        name={show ? "eye-off-outline" : "eye-outline"}
+                        size={20}
+                        color="#6B7280"
+                    />
                 </TouchableOpacity>
             </View>
         </View>
@@ -468,87 +556,300 @@ function PasswordField({ label, value, onChange, show, toggleShow }: any) {
 }
 
 const styles = StyleSheet.create({
-    gradient: { flex: 1 },
-    container: { flex: 1 },
-    scrollContent: { flexGrow: 1, justifyContent: "center", padding: 24 },
-    header: { alignItems: "center", marginBottom: 32 },
-    iconContainer: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        backgroundColor: "rgba(255,255,255,0.2)",
+    mainContainer: {
+        flex: 1,
+        backgroundColor: "#f3f4f6",
+    },
+    headerBar: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backgroundColor: "#047857",
+        paddingTop: Platform.OS === "ios" ? 50 : 20,
+        paddingBottom: 16,
+        paddingHorizontal: 16,
+        elevation: 4,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    backButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: "rgba(255,255,255,0.15)",
         justifyContent: "center",
         alignItems: "center",
-        marginBottom: 16
     },
-    title: { fontSize: 32, fontWeight: "bold", color: "#fff" },
-    subtitle: { fontSize: 16, color: "rgba(255,255,255,0.9)" },
-    card: { backgroundColor: "#fff", borderRadius: 24, padding: 24 },
-    inputWrapper: { marginBottom: 20 },
-    label: { fontSize: 14, fontWeight: "600", color: "#374151", marginBottom: 8 },
+    headerContent: {
+        flex: 1,
+        marginLeft: 12,
+    },
+    headerTitle: {
+        fontSize: 20,
+        fontWeight: "700",
+        color: "#fff",
+        letterSpacing: 0.3,
+    },
+    headerSubtitle: {
+        fontSize: 13,
+        color: "rgba(255,255,255,0.85)",
+        marginTop: 2,
+    },
+    headerRight: {
+        width: 40,
+    },
+    container: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 16,
+        paddingBottom: 24,
+    },
+    formCard: {
+        backgroundColor: "#fff",
+        borderRadius: 16,
+        padding: 20,
+        marginBottom: 16,
+        elevation: 2,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+    },
+    progressSection: {
+        marginBottom: 24,
+    },
+    progressBar: {
+        height: 4,
+        backgroundColor: "#e5e7eb",
+        borderRadius: 2,
+        overflow: "hidden",
+        marginBottom: 8,
+    },
+    progressFill: {
+        height: "100%",
+        backgroundColor: "#047857",
+    },
+    progressText: {
+        fontSize: 12,
+        color: "#6b7280",
+        fontWeight: "500",
+    },
+    section: {
+        marginBottom: 4,
+    },
+    sectionHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 16,
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: "700",
+        color: "#1f2937",
+        marginLeft: 10,
+        letterSpacing: 0.2,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: "#e5e7eb",
+        marginVertical: 24,
+    },
+    inputWrapper: {
+        marginBottom: 18,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#374151",
+        marginBottom: 8,
+        letterSpacing: 0.2,
+    },
+    required: {
+        color: "#dc2626",
+        fontSize: 14,
+    },
     inputContainer: {
         flexDirection: "row",
         alignItems: "center",
-        backgroundColor: "#F9FAFB",
+        backgroundColor: "#f9fafb",
         borderRadius: 12,
-        borderWidth: 1,
-        borderColor: "#E5E7EB",
-        paddingHorizontal: 12
+        borderWidth: 1.5,
+        borderColor: "#e5e7eb",
+        paddingHorizontal: 14,
+        height: 52,
     },
-    inputIcon: { marginRight: 8 },
-    input: { flex: 1, height: 50, fontSize: 16, color: "#1F2937" },
-    eyeIcon: { padding: 8 },
-    uploadContainer: {
+    inputContainerFocused: {
+        backgroundColor: "#fff",
+        borderColor: "#047857",
+        elevation: 1,
+        shadowColor: "#047857",
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    inputIconWrapper: {
+        marginRight: 10,
+    },
+    inputPrefix: {
+        fontSize: 15,
+        color: "#6b7280",
+        fontWeight: "600",
+        marginRight: 8,
+    },
+    textInput: {
+        flex: 1,
+        fontSize: 15,
+        color: "#1f2937",
+        fontWeight: "500",
+    },
+    eyeButton: {
+        padding: 8,
+        marginLeft: 4,
+    },
+    passwordHint: {
+        fontSize: 12,
+        color: "#6b7280",
+        marginTop: 6,
+        marginLeft: 2,
+    },
+    uploadLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#374151",
+        marginBottom: 12,
+        letterSpacing: 0.2,
+    },
+    uploadBox: {
         borderWidth: 2,
         borderStyle: "dashed",
-        borderColor: "#E5E7EB",
+        borderColor: "#d1d5db",
         borderRadius: 12,
         padding: 24,
         alignItems: "center",
-        backgroundColor: "#F9FAFB"
+        backgroundColor: "#fafafa",
     },
-    uploadTextContainer: { alignItems: "center", marginTop: 12 },
-    uploadText: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
-    uploadTextSuccess: { fontSize: 14, color: "#16a34a", fontWeight: "600" },
-    uploadSubtext: { fontSize: 12, color: "#9CA3AF", marginTop: 4 },
-    helpText: { fontSize: 12, color: "#6b7280", marginTop: 8, fontStyle: "italic" },
-    buttonRow: {
+    uploadBoxActive: {
+        borderColor: "#10b981",
+        backgroundColor: "#f0fdf4",
+        borderStyle: "solid",
+    },
+    uploadIcon: {
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: "#f3f4f6",
+        justifyContent: "center",
+        alignItems: "center",
+        marginBottom: 12,
+    },
+    uploadIconActive: {
+        backgroundColor: "#d1fae5",
+    },
+    uploadPrompt: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: "#4b5563",
+        marginBottom: 4,
+    },
+    uploadedText: {
+        fontSize: 15,
+        fontWeight: "600",
+        color: "#047857",
+        marginBottom: 4,
+    },
+    uploadHint: {
+        fontSize: 12,
+        color: "#9ca3af",
+        textAlign: "center",
+    },
+    infoBox: {
+        flexDirection: "row",
+        backgroundColor: "#e0f2fe",
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 12,
+        alignItems: "center",
+    },
+    infoText: {
+        fontSize: 12,
+        color: "#0369a1",
+        marginLeft: 8,
+        flex: 1,
+        lineHeight: 16,
+    },
+    actionSection: {
+        backgroundColor: "#fff",
+        borderRadius: 16,
+        padding: 16,
+        elevation: 2,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+    },
+    buttonContainer: {
         flexDirection: "row",
         gap: 12,
-        marginTop: 8,
+        marginBottom: 12,
     },
-    button: {
+    actionButton: {
         flex: 1,
-        borderRadius: 12,
-        overflow: "hidden",
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        paddingVertical: 16,
+        paddingVertical: 14,
+        borderRadius: 10,
+        gap: 8,
     },
-    submitButton: {
-        flex: 2,
-    },
-    submitButtonDisabled: { opacity: 0.7 },
-    buttonGradient: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 16,
-        width: '100%',
-        height: '100%',
-    },
-    cancelButton: {
+    cancelBtn: {
         backgroundColor: "#fef2f2",
-        borderWidth: 1,
+        borderWidth: 1.5,
         borderColor: "#fecaca",
     },
-    clearButton: {
-        backgroundColor: "#f3f4f6",
-        borderWidth: 1,
+    clearBtn: {
+        backgroundColor: "#f9fafb",
+        borderWidth: 1.5,
         borderColor: "#e5e7eb",
     },
-    buttonText: { fontSize: 16, fontWeight: "bold", color: "#fff" },
-    cancelButtonText: { fontSize: 16, fontWeight: "600", color: "#ef4444", marginLeft: 8 },
-    clearButtonText: { fontSize: 16, fontWeight: "600", color: "#6b7280", marginLeft: 8 },
+    cancelBtnText: {
+        fontSize: 15,
+        fontWeight: "700",
+        color: "#dc2626",
+        letterSpacing: 0.3,
+    },
+    clearBtnText: {
+        fontSize: 15,
+        fontWeight: "700",
+        color: "#4b5563",
+        letterSpacing: 0.3,
+    },
+    submitBtn: {
+        borderRadius: 12,
+        overflow: "hidden",
+        elevation: 3,
+        shadowColor: "#047857",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+    },
+    submitBtnDisabled: {
+        opacity: 0.6,
+    },
+    submitGradient: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 16,
+        gap: 10,
+    },
+    submitBtnText: {
+        fontSize: 16,
+        fontWeight: "800",
+        color: "#fff",
+        letterSpacing: 0.5,
+        textTransform: "uppercase",
+    },
 });
