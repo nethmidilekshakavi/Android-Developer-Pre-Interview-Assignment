@@ -2,6 +2,7 @@
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import WelcomeScreen from "../screens/WelcomeScreen";
 import LoginScreen from "../screens/LoginScreen";
 import LoanFormScreen from "../screens/LoanFormScreen";
 import { useAuth } from "../context/AuthContext";
@@ -16,12 +17,11 @@ export default function AppNavigator() {
         <NavigationContainer>
             <Stack.Navigator
                 screenOptions={{ headerShown: false }}
-                initialRouteName={isAuthenticated ? "LoanList" : "Login"}>
-                {/* Login screen */}
+                initialRouteName="Welcome"
+            >
+                <Stack.Screen name="Welcome" component={WelcomeScreen} />
                 <Stack.Screen name="Login" component={LoginScreen} />
-                {/* Application form */}
                 <Stack.Screen name="ApplicationForm" component={LoanFormScreen} />
-                {/* Manager loan list */}
                 <Stack.Screen name="LoanList" component={LoanListScreen} />
             </Stack.Navigator>
         </NavigationContainer>

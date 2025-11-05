@@ -29,7 +29,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const login = async (username: string, password: string): Promise<boolean> => {
         try {
-            // Hardcoded credentials as per assignment requirement
             // username: "manager", password: "mgr2025"
             if (username.trim() === "manager" && password.trim() === "mgr2025") {
                 setIsAuthenticated(true);

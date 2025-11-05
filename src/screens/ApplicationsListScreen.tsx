@@ -379,17 +379,6 @@ export default function LoanListScreen({ navigation }: any) {
                         <Icon name="file-document-multiple-outline" size={80} color="#cbd5e1" />
                     </View>
                     <Text style={styles.emptyTitle}>No Applications Found</Text>
-                    <Text style={styles.emptyDescription}>
-                        Start by creating your first loan application
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.emptyActionButton}
-                        onPress={handleAddNew}
-                        activeOpacity={0.8}
-                    >
-                        <Icon name="plus-circle-outline" size={20} color="#fff" />
-                        <Text style={styles.emptyActionText}>Create Application</Text>
-                    </TouchableOpacity>
                 </Animated.View>
             ) : (
                 <FlatList
@@ -638,6 +627,7 @@ function StatCard({ icon, value, label, color, bgColor }: any) {
 // --- Styles ---
 const styles = StyleSheet.create({
     container: {
+        top:15,
         flex: 1,
         backgroundColor: "#f3f4f6",
     },

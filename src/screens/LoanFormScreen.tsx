@@ -11,6 +11,7 @@ import {
     ActivityIndicator,
     Alert,
     StatusBar,
+    SafeAreaView,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -18,7 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
 import Toast from "react-native-toast-message";
-import {LoanApplication} from "../models/LoanApplication";
+import { LoanApplication } from "../models/LoanApplication";
 
 type Props = {
     navigation: NativeStackNavigationProp<any>;
@@ -38,10 +39,11 @@ export default function LoanFormScreen({ navigation, route }: Props) {
     const [isEditMode, setIsEditMode] = useState(false);
     const [editId, setEditId] = useState<number | undefined>();
 
-    // Load data if in edit mode
+    // Load data if in edit mode (run only when route.params changes)
     useEffect(() => {
-        if (route.params?.editMode && route.params?.loanData) {
-            const loanData: LoanApplication = route.params.loanData;
+        const params = route?.params;
+        if (params?.editMode && params?.loanData) {
+            const loanData: LoanApplication = params.loanData;
             setIsEditMode(true);
             setEditId(loanData.id);
             setName(loanData.name || "");
@@ -54,11 +56,12 @@ export default function LoanFormScreen({ navigation, route }: Props) {
             if (loanData.paysheetUri) {
                 setPdfFile({
                     name: "Existing PDF File",
-                    uri: loanData.paysheetUri
+                    uri: loanData.paysheetUri,
                 });
             }
         }
-    }, [route.params]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [route?.params]);
 
     const validateEmail = (email: string) => /\S+@\S+\.\S+/.test(email);
 
@@ -68,18 +71,20 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                 type: "application/pdf",
                 copyToCacheDirectory: true,
             });
-
-            if (result.assets && result.assets.length > 0) {
-                const file = result.assets[0];
+            // @ts-ignore
+            if (result.type === "success") {
+                // Some versions return assets array, but standard expo gives result with uri/name
+                // Normalize to single object for our state
+                const file = (result as any).assets && (result as any).assets.length > 0
+                    ? (result as any).assets[0]
+                    : result;
                 setPdfFile(file);
-                Toast.show({ type: "success", text1: `Selected: ${file.name}` });
-                // @ts-ignore
-            } else if (result.type === "success") {
-                setPdfFile(result);
-                // @ts-ignore
-                Toast.show({ type: "success", text1: `Selected: ${result.name}` });
+                Toast.show({ type: "success", text1: `Selected: ${file.name || "document"}` });
+            } else {
+                // user cancelled - do nothing
             }
         } catch (err) {
+            console.error("Document pick error:", err);
             Toast.show({ type: "error", text1: "Failed to pick document" });
         }
     };
@@ -137,7 +142,7 @@ export default function LoanFormScreen({ navigation, route }: Props) {
             const existingLoans: LoanApplication[] = existingLoansJson ? JSON.parse(existingLoansJson) : [];
 
             if (isEditMode && editId) {
-                const updatedLoans = existingLoans.map(loan =>
+                const updatedLoans = existingLoans.map((loan) =>
                     loan.id === editId
                         ? {
                             ...loan,
@@ -160,7 +165,7 @@ export default function LoanFormScreen({ navigation, route }: Props) {
 
                 setTimeout(() => {
                     navigation.navigate("ApplicationsList");
-                }, 1500);
+                }, 800);
             } else {
                 const newLoan: LoanApplication = {
                     id: Date.now(),
@@ -181,6 +186,7 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                     text1: "Application submitted successfully!",
                 });
 
+                // clear form
                 setName("");
                 setEmail("");
                 setTel("");
@@ -191,13 +197,13 @@ export default function LoanFormScreen({ navigation, route }: Props) {
 
                 setTimeout(() => {
                     navigation.navigate("Login");
-                }, 2000);
+                }, 1000);
             }
         } catch (error) {
-            console.error(error);
+            console.error("Save error:", error);
             Toast.show({
                 type: "error",
-                text1: `Failed to ${isEditMode ? 'update' : 'save'} application`
+                text1: `Failed to ${isEditMode ? "update" : "save"} application`,
             });
         } finally {
             setIsLoading(false);
@@ -205,82 +211,63 @@ export default function LoanFormScreen({ navigation, route }: Props) {
     };
 
     const handleCancelEdit = () => {
-        Alert.alert(
-            "Cancel Edit",
-            "Are you sure you want to cancel editing? Your changes will be lost.",
-            [
-                { text: "Continue Editing", style: "cancel" },
-                {
-                    text: "Cancel",
-                    style: "destructive",
-                    onPress: () => navigation.navigate("ApplicationsList")
-                }
-            ]
-        );
+        Alert.alert("Cancel Edit", "Are you sure you want to cancel editing? Your changes will be lost.", [
+            { text: "Continue Editing", style: "cancel" },
+            {
+                text: "Cancel",
+                style: "destructive",
+                onPress: () => navigation.navigate("ApplicationsList"),
+            },
+        ]);
     };
 
     const clearForm = () => {
-        Alert.alert(
-            "Clear Form",
-            "Are you sure you want to clear all fields?",
-            [
-                { text: "No", style: "cancel" },
-                {
-                    text: "Yes",
-                    style: "destructive",
-                    onPress: () => {
-                        setName("");
-                        setEmail("");
-                        setTel("");
-                        setOccupation("");
-                        setSalary("");
-                        setPassword("");
-                        setPdfFile(null);
-                        Toast.show({ type: "success", text1: "Form cleared" });
-                    }
-                }
-            ]
-        );
+        Alert.alert("Clear Form", "Are you sure you want to clear all fields?", [
+            { text: "No", style: "cancel" },
+            {
+                text: "Yes",
+                style: "destructive",
+                onPress: () => {
+                    setName("");
+                    setEmail("");
+                    setTel("");
+                    setOccupation("");
+                    setSalary("");
+                    setPassword("");
+                    setPdfFile(null);
+                    Toast.show({ type: "success", text1: "Form cleared" });
+                },
+            },
+        ]);
     };
 
     return (
-        <View style={styles.mainContainer}>
+        <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="light-content" backgroundColor="#047857" />
-
-            {/* Professional Header Bar */}
             <View style={styles.headerBar}>
-                <TouchableOpacity
-                    onPress={() => navigation.goBack()}
-                    style={styles.backButton}
-                    activeOpacity={0.7}
-                >
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton} activeOpacity={0.7}>
                     <Icon name="arrow-left" size={24} color="#fff" />
                 </TouchableOpacity>
                 <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>
-                        {isEditMode ? "Edit Application" : "New Application"}
-                    </Text>
-                    <Text style={styles.headerSubtitle}>
-                        {isEditMode ? "Update loan details" : "Personal Loan Application"}
-                    </Text>
+                    <Text style={styles.headerTitle}>{isEditMode ? "Edit Application" : "New Application"}</Text>
+                    <Text style={styles.headerSubtitle}>{isEditMode ? "Update loan details" : "Personal Loan Application"}</Text>
                 </View>
                 <View style={styles.headerRight} />
             </View>
 
-            <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-                style={styles.container}
-            >
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.container}>
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled={true}
                 >
                     {/* Professional Card Container */}
                     <View style={styles.formCard}>
                         {/* Progress Indicator */}
                         <View style={styles.progressSection}>
                             <View style={styles.progressBar}>
-                                <View style={[styles.progressFill, { width: '33%' }]} />
+                                <View style={[styles.progressFill, { width: "33%" }]} />
                             </View>
                             <Text style={styles.progressText}>Step 1 of 3 - Personal Information</Text>
                         </View>
@@ -292,32 +279,9 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                                 <Text style={styles.sectionTitle}>Personal Details</Text>
                             </View>
 
-                            <InputField
-                                icon="account"
-                                label="Full Name"
-                                value={name}
-                                onChange={setName}
-                                placeholder="Enter your full name"
-                                required
-                            />
-                            <InputField
-                                icon="email"
-                                label="Email Address"
-                                value={email}
-                                onChange={setEmail}
-                                placeholder="your.email@example.com"
-                                keyboardType="email-address"
-                                required
-                            />
-                            <InputField
-                                icon="phone"
-                                label="Phone Number"
-                                value={tel}
-                                onChange={setTel}
-                                placeholder="+94 77 123 4567"
-                                keyboardType="phone-pad"
-                                required
-                            />
+                            <InputField icon="account" label="Full Name" value={name} onChange={setName} placeholder="Enter your full name" required />
+                            <InputField icon="email" label="Email Address" value={email} onChange={setEmail} placeholder="your.email@example.com" keyboardType="email-address" required />
+                            <InputField icon="phone" label="Phone Number" value={tel} onChange={setTel} placeholder="+94 77 123 4567" keyboardType="phone-pad" required />
                         </View>
 
                         {/* Divider */}
@@ -330,24 +294,8 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                                 <Text style={styles.sectionTitle}>Employment Details</Text>
                             </View>
 
-                            <InputField
-                                icon="briefcase-outline"
-                                label="Occupation"
-                                value={occupation}
-                                onChange={setOccupation}
-                                placeholder="e.g., Software Engineer"
-                                required
-                            />
-                            <InputField
-                                icon="currency-usd"
-                                label="Monthly Salary"
-                                value={salary}
-                                onChange={setSalary}
-                                placeholder="150,000"
-                                keyboardType="numeric"
-                                required
-                                prefix="LKR"
-                            />
+                            <InputField icon="briefcase-outline" label="Occupation" value={occupation} onChange={setOccupation} placeholder="e.g., Software Engineer" required />
+                            <InputField icon="currency-usd" label="Monthly Salary" value={salary} onChange={setSalary} placeholder="150,000" keyboardType="numeric" required prefix="LKR" />
                         </View>
 
                         {/* Divider */}
@@ -362,16 +310,10 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                                         <Text style={styles.sectionTitle}>Security</Text>
                                     </View>
 
-                                    <PasswordField
-                                        label="Create Password"
-                                        value={password}
-                                        onChange={setPassword}
-                                        show={showPassword}
-                                        toggleShow={() => setShowPassword(!showPassword)}
-                                    />
+                                    <PasswordField label="Create Password" value={password} onChange={setPassword} show={showPassword} toggleShow={() => setShowPassword(!showPassword)} />
                                     <Text style={styles.passwordHint}>
-                                        <Icon name="information" size={14} color="#6b7280" />
-                                        {" "}Minimum 4 characters required
+                                        <Icon name="information" size={14} color="#6b7280" />{" "}
+                                        Minimum 4 characters required
                                     </Text>
                                 </View>
                                 <View style={styles.divider} />
@@ -389,35 +331,18 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                                 Paysheet Document {!isEditMode && <Text style={styles.required}>*</Text>}
                             </Text>
 
-                            <TouchableOpacity
-                                style={[styles.uploadBox, pdfFile && styles.uploadBoxActive]}
-                                onPress={pickDocument}
-                                disabled={isLoading}
-                                activeOpacity={0.7}
-                            >
+                            <TouchableOpacity style={[styles.uploadBox, pdfFile && styles.uploadBoxActive]} onPress={pickDocument} disabled={isLoading} activeOpacity={0.7}>
                                 <View style={[styles.uploadIcon, pdfFile && styles.uploadIconActive]}>
-                                    <Icon
-                                        name={pdfFile ? "check-circle" : "cloud-upload"}
-                                        size={32}
-                                        color={pdfFile ? "#047857" : "#9CA3AF"}
-                                    />
+                                    <Icon name={pdfFile ? "check-circle" : "cloud-upload"} size={32} color={pdfFile ? "#047857" : "#9CA3AF"} />
                                 </View>
-                                <Text style={pdfFile ? styles.uploadedText : styles.uploadPrompt}>
-                                    {pdfFile ? pdfFile.name : "Click to upload PDF document"}
-                                </Text>
-                                <Text style={styles.uploadHint}>
-                                    {isEditMode
-                                        ? "Upload a new file to replace existing document"
-                                        : "PDF format only • Max 10MB"}
-                                </Text>
+                                <Text style={pdfFile ? styles.uploadedText : styles.uploadPrompt}>{pdfFile ? pdfFile.name : "Click to upload PDF document"}</Text>
+                                <Text style={styles.uploadHint}>{isEditMode ? "Upload a new file to replace existing document" : "PDF format only • Max 10MB"}</Text>
                             </TouchableOpacity>
 
                             {isEditMode && !pdfFile && (
                                 <View style={styles.infoBox}>
                                     <Icon name="information" size={16} color="#0369a1" />
-                                    <Text style={styles.infoText}>
-                                        Your current document will be retained if no new file is selected
-                                    </Text>
+                                    <Text style={styles.infoText}>Your current document will be retained if no new file is selected</Text>
                                 </View>
                             )}
                         </View>
@@ -427,54 +352,24 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                     <View style={styles.actionSection}>
                         <View style={styles.buttonContainer}>
                             {isEditMode && (
-                                <TouchableOpacity
-                                    style={[styles.actionButton, styles.cancelBtn]}
-                                    onPress={handleCancelEdit}
-                                    disabled={isLoading}
-                                    activeOpacity={0.8}
-                                >
+                                <TouchableOpacity style={[styles.actionButton, styles.cancelBtn]} onPress={handleCancelEdit} disabled={isLoading} activeOpacity={0.8}>
                                     <Icon name="close-circle-outline" size={20} color="#dc2626" />
                                     <Text style={styles.cancelBtnText}>Cancel</Text>
                                 </TouchableOpacity>
                             )}
 
-                            <TouchableOpacity
-                                style={[styles.actionButton, styles.clearBtn]}
-                                onPress={clearForm}
-                                disabled={isLoading}
-                                activeOpacity={0.8}
-                            >
+                            <TouchableOpacity style={[styles.actionButton, styles.clearBtn]} onPress={clearForm} disabled={isLoading} activeOpacity={0.8}>
                                 <Icon name="refresh" size={20} color="#4b5563" />
                                 <Text style={styles.clearBtnText}>Reset</Text>
                             </TouchableOpacity>
                         </View>
 
-                        <TouchableOpacity
-                            style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]}
-                            onPress={handleSubmit}
-                            disabled={isLoading}
-                            activeOpacity={0.9}
-                        >
-                            <LinearGradient
-                                colors={["#059669", "#047857", "#065f46"]}
-                                style={styles.submitGradient}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                            >
-                                {isLoading ? (
-                                    <ActivityIndicator color="#fff" size="small" />
-                                ) : (
-                                    <>
-                                        <Icon
-                                            name={isEditMode ? "check-bold" : "send"}
-                                            size={22}
-                                            color="#fff"
-                                        />
-                                        <Text style={styles.submitBtnText}>
-                                            {isEditMode ? "Update Application" : "Submit Application"}
-                                        </Text>
-                                    </>
-                                )}
+                        <TouchableOpacity style={[styles.submitBtn, isLoading && styles.submitBtnDisabled]} onPress={handleSubmit} disabled={isLoading} activeOpacity={0.9}>
+                            <LinearGradient colors={["#059669", "#047857", "#065f46"]} style={styles.submitGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                                {isLoading ? <ActivityIndicator color="#fff" size="small" /> : <>
+                                    <Icon name={isEditMode ? "check-bold" : "send"} size={22} color="#fff" />
+                                    <Text style={styles.submitBtnText}>{isEditMode ? "Update Application" : "Submit Application"}</Text>
+                                </>}
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
@@ -482,7 +377,7 @@ export default function LoanFormScreen({ navigation, route }: Props) {
             </KeyboardAvoidingView>
 
             <Toast />
-        </View>
+        </SafeAreaView>
     );
 }
 
@@ -495,24 +390,12 @@ function InputField({ icon, label, value, onChange, placeholder, keyboardType, r
             <Text style={styles.inputLabel}>
                 {label} {required && <Text style={styles.required}>*</Text>}
             </Text>
-            <View style={[
-                styles.inputContainer,
-                isFocused && styles.inputContainerFocused
-            ]}>
+            <View style={[styles.inputContainer, isFocused && styles.inputContainerFocused]}>
                 <View style={styles.inputIconWrapper}>
                     <Icon name={icon} size={20} color={isFocused ? "#047857" : "#9CA3AF"} />
                 </View>
                 {prefix && <Text style={styles.inputPrefix}>{prefix}</Text>}
-                <TextInput
-                    placeholder={placeholder}
-                    placeholderTextColor="#9CA3AF"
-                    style={styles.textInput}
-                    value={value}
-                    onChangeText={onChange}
-                    keyboardType={keyboardType || "default"}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                />
+                <TextInput placeholder={placeholder} placeholderTextColor="#9CA3AF" style={styles.textInput} value={value} onChangeText={onChange} keyboardType={keyboardType || "default"} onFocus={() => setIsFocused(true)} onBlur={() => setIsFocused(false)} />
             </View>
         </View>
     );
@@ -526,29 +409,13 @@ function PasswordField({ label, value, onChange, show, toggleShow }: any) {
             <Text style={styles.inputLabel}>
                 {label} <Text style={styles.required}>*</Text>
             </Text>
-            <View style={[
-                styles.inputContainer,
-                isFocused && styles.inputContainerFocused
-            ]}>
+            <View style={[styles.inputContainer, isFocused && styles.inputContainerFocused]}>
                 <View style={styles.inputIconWrapper}>
                     <Icon name="lock-outline" size={20} color={isFocused ? "#047857" : "#9CA3AF"} />
                 </View>
-                <TextInput
-                    placeholder="Enter password"
-                    placeholderTextColor="#9CA3AF"
-                    style={[styles.textInput, { flex: 1 }]}
-                    secureTextEntry={!show}
-                    value={value}
-                    onChangeText={onChange}
-                    onFocus={() => setIsFocused(true)}
-                    onBlur={() => setIsFocused(false)}
-                />
+                <TextInput placeholder="Enter password" placeholderTextColor="#9CA3AF" style={[styles.textInput, { flex: 1 }]} secureTextEntry={!show} value={value} onChangeText={onChange} onFocus={() => setIsFocused(true)} onBlur={() => setIsFocused(false)} />
                 <TouchableOpacity onPress={toggleShow} style={styles.eyeButton}>
-                    <Icon
-                        name={show ? "eye-off-outline" : "eye-outline"}
-                        size={20}
-                        color="#6B7280"
-                    />
+                    <Icon name={show ? "eye-off-outline" : "eye-outline"} size={20} color="#6B7280" />
                 </TouchableOpacity>
             </View>
         </View>
@@ -556,6 +423,11 @@ function PasswordField({ label, value, onChange, show, toggleShow }: any) {
 }
 
 const styles = StyleSheet.create({
+    safeArea: {
+        top:15,
+        flex: 1,
+        backgroundColor: "#f3f4f6",
+    },
     mainContainer: {
         flex: 1,
         backgroundColor: "#f3f4f6",
@@ -565,8 +437,8 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "space-between",
         backgroundColor: "#047857",
-        paddingTop: Platform.OS === "ios" ? 50 : 20,
-        paddingBottom: 16,
+        paddingTop: Platform.OS === "ios" ? 12 : 20,
+        paddingBottom: 12,
         paddingHorizontal: 16,
         elevation: 4,
         shadowColor: "#000",

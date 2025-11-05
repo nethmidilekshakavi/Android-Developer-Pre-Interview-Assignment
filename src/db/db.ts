@@ -15,7 +15,7 @@ export const initDB = async (): Promise<void> => {
             if (!existing) {
                 await AsyncStorage.setItem("applications", JSON.stringify([]));
             }
-            console.log("✅ Web: AsyncStorage initialized");
+            console.log("Web: AsyncStorage initialized");
         } else {
             db = await SQLite.openDatabaseAsync("loanappDB");
             await db.execAsync(`
@@ -30,10 +30,10 @@ export const initDB = async (): Promise<void> => {
                     submittedAt TEXT DEFAULT CURRENT_TIMESTAMP
                 );
             `);
-            console.log("✅ Mobile: SQLite DB initialized");
+            console.log("Mobile: SQLite DB initialized");
         }
     } catch (error) {
-        console.error("❌ DB Init Error:", error);
+        console.error("DB Init Error:", error);
         throw error;
     }
 };

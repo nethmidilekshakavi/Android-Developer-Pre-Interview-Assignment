@@ -63,6 +63,13 @@ export default function LoginScreen({ navigation }: Props) {
                     style={styles.container}
                 >
                     <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+                        <TouchableOpacity
+                            onPress={() => navigation.goBack()}
+                            style={styles.backButton}
+                            activeOpacity={0.7}
+                        >
+                            <Icon name="arrow-left" size={24} color="#fff" />
+                        </TouchableOpacity>
                         {/* Logo/Header block */}
                         <View style={styles.header}>
                             <LinearGradient
@@ -136,20 +143,7 @@ export default function LoginScreen({ navigation }: Props) {
                                         )}
                                     </LinearGradient>
                                 </TouchableOpacity>
-                                {/* Divider/Or */}
-                                <View style={styles.dividerRow}>
-                                    <View style={styles.divider} />
-                                    <Text style={styles.or}>or</Text>
-                                    <View style={styles.divider} />
-                                </View>
-                                {/* Application Form - Link */}
-                                <TouchableOpacity
-                                    onPress={() => navigation.navigate("ApplicationForm")}
-                                    style={styles.linkContainer}
-                                >
-                                    <Icon name="account-plus" size={18} color="#fff" />
-                                    <Text style={styles.linkText}>Fill Application Form</Text>
-                                </TouchableOpacity>
+
                             </View>
                         </View>
                     </ScrollView>
@@ -162,6 +156,7 @@ export default function LoginScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
     gradient: {
+        top:15,
         flex: 1,
         minHeight: "100%",
         justifyContent: "center"
@@ -322,4 +317,13 @@ const styles = StyleSheet.create({
         marginLeft: 7,
         letterSpacing: 0.3,
     },
+    backButton: {
+        width: 40,
+        height: 40,
+        right:-20,
+        borderRadius: 20,
+        backgroundColor: "rgba(255,255,255,0.15)",
+        justifyContent: "center",
+        alignItems: "center",
+    }
 });

@@ -4,5 +4,11 @@
   },
   "plugins": [
     "expo-sqlite"
-  ]
+  ],
+  "extra": {
+    "eas": {
+      "projectId": "59e93aa2-2ded-4543-8395-56d4d191e463"
+    }
+  },
+  "owner": "nethu0311"
 }
