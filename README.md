@@ -79,6 +79,8 @@ Applicants can submit loan applications with paysheet PDFs, while managers can s
 ## APK / Build
 Download APK: [LoanApp APK](https://expo.dev/artifacts/eas/gfiT27GWLUpLtMh3b12AFJ.apk)
 
+## GitHub Repository:
+https://github.com/nethmidilekshakavi/Android-Developer-Pre-Interview-Assignment.git
 
 
 ## 🧠 System Flow
