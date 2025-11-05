@@ -1,0 +1,8 @@
+{
+  "android": {
+    "package": "com.nethu0311.loanappexpo"
+  },
+  "plugins": [
+    "expo-sqlite"
+  ]
+}
