@@ -54,7 +54,7 @@ export default function LoginScreen({ navigation }: Props) {
 
     return (
         <>
-            <LinearGradient colors={["#10b981", "#059669", "#047857"]} style={styles.gradient}>
+            <LinearGradient colors={["#2563eb", "#2563eb", "#2563eb"]} style={styles.gradient}>
                 <KeyboardAvoidingView
                     behavior={Platform.OS === "ios" ? "padding" : "height"}
                     style={styles.container}
@@ -110,7 +110,7 @@ export default function LoginScreen({ navigation }: Props) {
                                 onPress={handleLogin}
                                 disabled={isLoading}
                             >
-                                <LinearGradient colors={["#10b981", "#059669"]} style={styles.buttonGradient}>
+                                <LinearGradient colors={["#2563eb", "#2563eb"]} style={styles.buttonGradient}>
                                     {isLoading ? (
                                         <ActivityIndicator color="#fff" />
                                     ) : (
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
         width: 120,
         height: 120,
         borderRadius: 60,
-        backgroundColor: "rgba(255,255,255,0.2)",
+        backgroundColor: "rgba(59, 130, 246, 0.2)", // Blue with opacity
         justifyContent: "center",
         alignItems: "center",
         marginBottom: 16,
@@ -177,8 +177,9 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "center",
         paddingVertical: 16,
+        backgroundColor: "#2563eb", // Professional blue
     },
     buttonText: { fontSize: 16, fontWeight: "bold", color: "#fff" },
     linkContainer: { marginTop: 16, alignItems: "center" },
-    linkText: { color: "#10b981", fontWeight: "600" },
+    linkText: { color: "#2563eb", fontWeight: "600" }, // Changed to blue
 });
