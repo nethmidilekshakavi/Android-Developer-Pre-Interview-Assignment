@@ -25,6 +25,7 @@ import {
 } from "../db/db";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {LoanApplication} from "../models/LoanApplication";
+import {RouteProp, useNavigation, useRoute} from "@react-navigation/native";
 
 export default function LoanListScreen({ navigation }: any) {
     const [loans, setLoans] = useState<LoanApplication[]>([]);
@@ -33,6 +34,9 @@ export default function LoanListScreen({ navigation }: any) {
     const [pdfModalVisible, setPdfModalVisible] = useState(false);
     const { logout } = useAuth();
 
+    const route = useRoute<PdfViewScreenRouteProp>();
+    const navigation = useNavigation();
+    const { pdfUri, applicantName } = route.params;
     // 🔹 Load loans
     const loadLoans = async () => {
         try {
@@ -366,6 +370,127 @@ export default function LoanListScreen({ navigation }: any) {
         );
     };
 
+    type PdfViewScreenRouteProp = RouteProp<{
+        PdfView: {
+            pdfUri: string;
+            applicantName: string;
+        };
+    }, 'PdfView'>;
+
+
+        const handleDownload = async () => {
+            try {
+                if (Platform.OS === 'web') {
+                    // Web download
+                    const link = document.createElement('a');
+                    link.href = pdfUri;
+                    link.download = `${applicantName.replace(/\s+/g, '_')}_paysheet.pdf`;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    Alert.alert('Download Started', 'PDF download has been initiated.');
+                } else {
+                    // Mobile download/share
+                    if (await Sharing.isAvailableAsync()) {
+                        await Sharing.shareAsync(pdfUri, {
+                            mimeType: 'application/pdf',
+                            dialogTitle: `Download ${applicantName}'s Paysheet`,
+                            UTI: 'com.adobe.pdf',
+                        });
+                    } else {
+                        Alert.alert('Download Unavailable', 'File download is not available on this device');
+                    }
+                }
+            } catch (error) {
+                console.error('Download error:', error);
+                Alert.alert('Error', 'Failed to download PDF');
+            }
+        };
+
+        const handleOpenExternal = async () => {
+            try {
+                const canOpen = await Linking.canOpenURL(pdfUri);
+                if (canOpen) {
+                    await Linking.openURL(pdfUri);
+                } else {
+                    Alert.alert('Error', 'Cannot open PDF on this device.');
+                }
+            } catch (error) {
+                console.error('Open external error:', error);
+                Alert.alert('Error', 'Unable to open PDF file');
+            }
+        };
+
+        // Fix URI for WebView
+        const getFixedUri = () => {
+            if (Platform.OS === 'ios' || Platform.OS === 'android') {
+                // For mobile, use the URI directly
+                return pdfUri;
+            } else {
+                // For web, use Google Docs viewer or direct link
+                return `https://docs.google.com/gview?embedded=true&url=${encodeURIComponent(pdfUri)}`;
+            }
+        };
+
+        return (
+            <View style={styles.container}>
+                {/* Header */}
+                <View style={styles.header}>
+                    <TouchableOpacity
+                        onPress={() => navigation.goBack()}
+                        style={styles.backButton}
+                    >
+                        <Icon name="arrow-left" size={24} color="#667eea" />
+                    </TouchableOpacity>
+                    <Text style={styles.title} numberOfLines={1}>
+                        {applicantName}'s Paysheet
+                    </Text>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity onPress={handleDownload} style={styles.headerButton}>
+                            <Icon name="download" size={22} color="#667eea" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={handleOpenExternal} style={styles.headerButton}>
+                            <Icon name="open-in-new" size={22} color="#667eea" />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {/* PDF Content */}
+                <View style={styles.pdfContainer}>
+                    {Platform.OS === 'web' ? (
+                        // Web PDF Viewer
+                        <iframe
+                            src={getFixedUri()}
+                            style={styles.webView}
+                            title={`PDF - ${applicantName}`}
+                            width="100%"
+                            height="100%"
+                        />
+                    ) : (
+                        // Mobile PDF Viewer
+                        <WebView
+                            source={{ uri: getFixedUri() }}
+                            style={styles.webView}
+                            startInLoadingState={true}
+                            scalesPageToFit={true}
+                        />
+                    )}
+                </View>
+
+                {/* Loading/Error State */}
+                {!pdfUri && (
+                    <View style={styles.errorContainer}>
+                        <Icon name="file-remove" size={80} color="#9ca3af" />
+                        <Text style={styles.errorTitle}>PDF Not Available</Text>
+                        <Text style={styles.errorText}>
+                            The PDF file could not be loaded. It may have been moved or deleted.
+                        </Text>
+                    </View>
+                )}
+            </View>
+        );
+    }
     // 🔹 Render individual loan card
     const renderLoanItem = ({ item }: { item: LoanApplication }) => (
         <View style={styles.card}>
