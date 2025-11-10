@@ -1,4 +1,3 @@
-
 export interface LoanApplication {
     id: number;
     name: string;
@@ -8,4 +7,5 @@ export interface LoanApplication {
     salary: number;
     paysheetUri: string | null;
     submittedAt: string;
+    status: 'pending' | 'approved' | 'rejected';
 }
