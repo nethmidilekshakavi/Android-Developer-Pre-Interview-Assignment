@@ -171,6 +171,7 @@ export default function LoanFormScreen({ navigation, route }: Props) {
                     salary: Number(salary),
                     paysheetUri: pdfFile?.uri || null,
                     submittedAt: new Date().toISOString(),
+                    status: 'pending', // Default status for new applications
                 };
                 existingLoans.push(newLoan);
                 await AsyncStorage.setItem("loanApplications", JSON.stringify(existingLoans));
@@ -223,7 +224,7 @@ export default function LoanFormScreen({ navigation, route }: Props) {
 
                         <TouchableOpacity style={styles.uploadBox} onPress={pickDocument}>
                             <Icon name="cloud-upload" size={30} color="#047857" />
-                            <Text style={{ marginTop: 6 }}>
+                            <Text style={{ marginTop: 6, textAlign: "center", color: "#6b7280" }}>
                                 {pdfFile ? pdfFile.name : "Upload paysheet (PDF)"}
                             </Text>
                         </TouchableOpacity>

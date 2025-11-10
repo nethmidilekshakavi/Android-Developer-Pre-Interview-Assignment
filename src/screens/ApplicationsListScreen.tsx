@@ -12,6 +12,7 @@ import {
     Platform,
     StatusBar,
     Animated,
+    TextInput,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import * as Sharing from "expo-sharing";
@@ -26,9 +27,11 @@ import {LoanApplication} from "../models/LoanApplication";
 
 export default function LoanListScreen({ navigation }: any) {
     const [loans, setLoans] = useState<LoanApplication[]>([]);
+    const [filteredLoans, setFilteredLoans] = useState<LoanApplication[]>([]);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
     const [pdfModalVisible, setPdfModalVisible] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
     const { logout } = useAuth();
 
     const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -43,14 +46,18 @@ export default function LoanListScreen({ navigation }: any) {
                 const loansWithIds = parsedData.map((loan, index) => ({
                     ...loan,
                     id: loan.id || index + 1,
-                    submittedAt: loan.submittedAt || new Date().toISOString()
+                    submittedAt: loan.submittedAt || new Date().toISOString(),
+                    status: loan.status || 'pending'
                 }));
                 setLoans(loansWithIds);
+                setFilteredLoans(loansWithIds);
             } else {
                 setLoans([]);
+                setFilteredLoans([]);
             }
         } catch (error) {
             setLoans([]);
+            setFilteredLoans([]);
             Alert.alert("Error", "Failed to load loan applications");
         }
     }, []);
@@ -73,9 +80,25 @@ export default function LoanListScreen({ navigation }: any) {
         return unsubscribe;
     }, [navigation, loadLoans, fadeAnim, slideAnim]);
 
+    // Search functionality
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+        if (query.trim() === "") {
+            setFilteredLoans(loans);
+        } else {
+            const filtered = loans.filter(loan =>
+                loan.email.toLowerCase().includes(query.toLowerCase()) ||
+                loan.name.toLowerCase().includes(query.toLowerCase()) ||
+                loan.tel.includes(query)
+            );
+            setFilteredLoans(filtered);
+        }
+    };
+
     const onRefresh = async () => {
         setRefreshing(true);
         await loadLoans();
+        setSearchQuery("");
         setRefreshing(false);
     };
 
@@ -90,7 +113,6 @@ export default function LoanListScreen({ navigation }: any) {
                 onPress: async () => {
                     try {
                         await logout();
-                        // Use any to avoid TypeScript errors temporarily
                         (navigation as any).replace("Login");
                     } catch (error) {
                         console.error("Logout error:", error);
@@ -99,6 +121,7 @@ export default function LoanListScreen({ navigation }: any) {
             },
         ]);
     };
+
     const clearAllData = () => {
         if (loans.length === 0) {
             Alert.alert("No Data", "There are no applications to delete");
@@ -126,7 +149,26 @@ export default function LoanListScreen({ navigation }: any) {
         );
     };
 
-    // --- PDF Actions (from your snippet, unchanged) ---
+    // Update status
+    const handleUpdateStatus = async (loanId: number, newStatus: 'approved' | 'rejected') => {
+        try {
+            const updatedLoans = loans.map(loan =>
+                loan.id === loanId ? { ...loan, status: newStatus } : loan
+            );
+            await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
+            setLoans(updatedLoans);
+            setFilteredLoans(updatedLoans.filter(loan =>
+                searchQuery.trim() === "" ||
+                loan.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                loan.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                loan.tel.includes(searchQuery)
+            ));
+            Alert.alert("Success", `Application ${newStatus} successfully`);
+        } catch {
+            Alert.alert("Error", "Failed to update status");
+        }
+    };
+
     const handleViewPdf = async (paysheetUri: string | null, applicantName: string) => {
         try {
             if (!paysheetUri) {
@@ -256,15 +298,6 @@ export default function LoanListScreen({ navigation }: any) {
     const handleEdit = (loan: LoanApplication) => navigation.navigate("ApplicationForm", { editMode: true, loanData: loan });
 
     const handleDeleteApplication = (id: number, name: string) => {
-        const updatedLoans = loans.filter(loan => loan.id !== id);
-        AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans))
-            .then(() => {
-                setLoans(updatedLoans);
-                Alert.alert("Success", `${name}'s application has been deleted`);
-            })
-            .catch(() => {
-                Alert.alert("Error", "Delete failed");
-            });
         Alert.alert(
             "Delete Application",
             `Delete ${name}'s application?`,
@@ -275,8 +308,10 @@ export default function LoanListScreen({ navigation }: any) {
                     style: "destructive",
                     onPress: async () => {
                         try {
+                            const updatedLoans = loans.filter(loan => loan.id !== id);
                             await AsyncStorage.setItem("loanApplications", JSON.stringify(updatedLoans));
                             setLoans(updatedLoans);
+                            setFilteredLoans(updatedLoans);
                             Alert.alert("Success", "Application deleted");
                         } catch {
                             Alert.alert("Error", "Delete failed");
@@ -295,10 +330,10 @@ export default function LoanListScreen({ navigation }: any) {
             onDelete={handleDeleteApplication}
             onViewPdf={handleViewPdf}
             onDownloadPdf={handleDownloadPdf}
+            onUpdateStatus={handleUpdateStatus}
         />
     );
 
-    // --- UI ---
     return (
         <View style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#047857" />
@@ -321,7 +356,6 @@ export default function LoanListScreen({ navigation }: any) {
                             >
                                 <Icon name="refresh" size={22} color="#fff" />
                             </TouchableOpacity>
-                            {/* Exit Button (Logout) */}
                             <TouchableOpacity
                                 onPress={() => navigation.goBack()}
                                 style={styles.backButton}
@@ -331,32 +365,51 @@ export default function LoanListScreen({ navigation }: any) {
                             </TouchableOpacity>
                         </View>
                     </View>
+
+                    {/* Search Bar */}
+                    <View style={styles.searchContainer}>
+                        <Icon name="magnify" size={20} color="#047857" style={styles.searchIcon} />
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search by email, name or phone..."
+                            placeholderTextColor="#9ca3af"
+                            value={searchQuery}
+                            onChangeText={handleSearch}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => handleSearch("")}>
+                                <Icon name="close-circle" size={20} color="#6b7280" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
+
                     {/* Stats */}
                     <View style={styles.statsContainer}>
                         <StatCard
                             icon="file-document-multiple-outline"
                             value={loans.length}
-                            label="Total Applications"
+                            label="Total"
                             color="#047857"
                             bgColor="#d1fae5"
                         />
                         <StatCard
-                            icon="file-check-outline"
-                            value={loans.filter(l => l.paysheetUri).length}
-                            label="With Documents"
+                            icon="check-circle"
+                            value={loans.filter(l => l.status === 'approved').length}
+                            label="Approved"
                             color="#059669"
                             bgColor="#d1fae5"
                         />
                         <StatCard
-                            icon="trending-up"
-                            value={loans.filter(l => l.salary >= 50000).length}
-                            label="High Value"
-                            color="#10b981"
-                            bgColor="#d1fae5"
+                            icon="clock-outline"
+                            value={loans.filter(l => l.status === 'pending').length}
+                            label="Pending"
+                            color="#f59e0b"
+                            bgColor="#fef3c7"
                         />
                     </View>
                 </View>
             </Animated.View>
+
             {/* Add Button */}
             <TouchableOpacity
                 style={styles.floatingAddButton}
@@ -366,8 +419,9 @@ export default function LoanListScreen({ navigation }: any) {
                 <Icon name="plus" size={26} color="#fff" />
                 <Text style={styles.floatingAddText}>New Application</Text>
             </TouchableOpacity>
+
             {/* List */}
-            {loans.length === 0 ? (
+            {filteredLoans.length === 0 ? (
                 <Animated.View style={[
                     styles.emptyState,
                     {
@@ -378,11 +432,18 @@ export default function LoanListScreen({ navigation }: any) {
                     <View style={styles.emptyIconContainer}>
                         <Icon name="file-document-multiple-outline" size={80} color="#cbd5e1" />
                     </View>
-                    <Text style={styles.emptyTitle}>No Applications Found</Text>
+                    <Text style={styles.emptyTitle}>
+                        {searchQuery ? "No Results Found" : "No Applications Found"}
+                    </Text>
+                    {searchQuery && (
+                        <Text style={styles.emptyDescription}>
+                            Try searching with a different email, name, or phone number
+                        </Text>
+                    )}
                 </Animated.View>
             ) : (
                 <FlatList
-                    data={loans}
+                    data={filteredLoans}
                     keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
                     renderItem={renderLoanItem}
                     refreshControl={
@@ -457,8 +518,9 @@ export default function LoanListScreen({ navigation }: any) {
 }
 
 // --- LoanCard ---
-function LoanCard({ item, index, onEdit, onDelete, onViewPdf, onDownloadPdf }: any) {
+function LoanCard({ item, index, onEdit, onDelete, onViewPdf, onDownloadPdf, onUpdateStatus }: any) {
     const itemAnim = useRef(new Animated.Value(0)).current;
+
     useEffect(() => {
         Animated.timing(itemAnim, {
             toValue: 1,
@@ -467,6 +529,23 @@ function LoanCard({ item, index, onEdit, onDelete, onViewPdf, onDownloadPdf }: a
             useNativeDriver: true,
         }).start();
     }, [index, itemAnim]);
+
+    const getStatusColor = (status: string) => {
+        switch(status) {
+            case 'approved': return '#059669';
+            case 'rejected': return '#dc2626';
+            default: return '#f59e0b';
+        }
+    };
+
+    const getStatusBgColor = (status: string) => {
+        switch(status) {
+            case 'approved': return '#d1fae5';
+            case 'rejected': return '#fee2e2';
+            default: return '#fef3c7';
+        }
+    };
+
     return (
         <Animated.View style={{
             opacity: itemAnim,
@@ -510,6 +589,23 @@ function LoanCard({ item, index, onEdit, onDelete, onViewPdf, onDownloadPdf }: a
                         </TouchableOpacity>
                     </View>
                 </View>
+
+                {/* Status Badge */}
+                <View style={[styles.statusBadge, { backgroundColor: getStatusBgColor(item.status) }]}>
+                    <Icon
+                        name={
+                            item.status === 'approved' ? 'check-circle' :
+                                item.status === 'rejected' ? 'close-circle' :
+                                    'clock-outline'
+                        }
+                        size={16}
+                        color={getStatusColor(item.status)}
+                    />
+                    <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+                        {item.status.toUpperCase()}
+                    </Text>
+                </View>
+
                 {/* Details */}
                 <View style={styles.detailsGrid}>
                     <DetailItem
@@ -538,6 +634,7 @@ function LoanCard({ item, index, onEdit, onDelete, onViewPdf, onDownloadPdf }: a
                         highlight
                     />
                 </View>
+
                 <View style={styles.timestampRow}>
                     <Icon name="clock-outline" size={14} color="#94a3b8" />
                     <Text style={styles.timestamp}>
@@ -550,6 +647,29 @@ function LoanCard({ item, index, onEdit, onDelete, onViewPdf, onDownloadPdf }: a
                         }) : "Not available"}
                     </Text>
                 </View>
+
+                {/* Status Update Buttons */}
+                {item.status === 'pending' && (
+                    <View style={styles.statusActions}>
+                        <TouchableOpacity
+                            style={[styles.statusButton, styles.approveButton]}
+                            onPress={() => onUpdateStatus(item.id, 'approved')}
+                            activeOpacity={0.8}
+                        >
+                            <Icon name="check-circle-outline" size={18} color="#fff" />
+                            <Text style={styles.statusButtonText}>Approve</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.statusButton, styles.rejectButton]}
+                            onPress={() => onUpdateStatus(item.id, 'rejected')}
+                            activeOpacity={0.8}
+                        >
+                            <Icon name="close-circle-outline" size={18} color="#fff" />
+                            <Text style={styles.statusButtonText}>Reject</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
                 {/* PDF Section */}
                 <View style={styles.pdfSection}>
                     <View style={styles.pdfHeader}>
@@ -648,7 +768,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "flex-start",
-        marginBottom: 20,
+        marginBottom: 16,
     },
     headerTitle: {
         fontSize: 28,
@@ -674,8 +794,22 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
     },
-    dangerButton: {
-        backgroundColor: "rgba(220, 38, 38, 0.2)",
+    searchContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        marginBottom: 16,
+    },
+    searchIcon: {
+        marginRight: 8,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        color: "#1f2937",
     },
     statsContainer: {
         flexDirection: "row",
@@ -819,6 +953,21 @@ const styles = StyleSheet.create({
     deleteIconButton: {
         backgroundColor: "#fee2e2",
     },
+    statusBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: "flex-start",
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        marginBottom: 16,
+        gap: 6,
+    },
+    statusText: {
+        fontSize: 12,
+        fontWeight: "700",
+        letterSpacing: 0.5,
+    },
     detailsGrid: {
         gap: 12,
         marginBottom: 16,
@@ -875,6 +1024,32 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: "#64748b",
         fontWeight: "500",
+    },
+    statusActions: {
+        flexDirection: "row",
+        gap: 10,
+        marginBottom: 16,
+    },
+    statusButton: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        paddingVertical: 12,
+        borderRadius: 10,
+        gap: 6,
+    },
+    approveButton: {
+        backgroundColor: "#059669",
+    },
+    rejectButton: {
+        backgroundColor: "#dc2626",
+    },
+    statusButtonText: {
+        fontSize: 14,
+        fontWeight: "700",
+        color: "#fff",
+        letterSpacing: 0.3,
     },
     pdfSection: {
         backgroundColor: "#fafafa",
@@ -986,26 +1161,6 @@ const styles = StyleSheet.create({
         textAlign: "center",
         marginBottom: 28,
         lineHeight: 22,
-    },
-    emptyActionButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        backgroundColor: "#047857",
-        paddingHorizontal: 28,
-        paddingVertical: 14,
-        borderRadius: 12,
-        elevation: 3,
-        shadowColor: "#047857",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        gap: 8,
-    },
-    emptyActionText: {
-        fontSize: 15,
-        fontWeight: "700",
-        color: "#fff",
-        letterSpacing: 0.4,
     },
     modalContainer: {
         flex: 1,
