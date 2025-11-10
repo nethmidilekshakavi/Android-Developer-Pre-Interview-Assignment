@@ -7,6 +7,7 @@ import LoginScreen from "../screens/LoginScreen";
 import LoanFormScreen from "../screens/LoanFormScreen";
 import { useAuth } from "../context/AuthContext";
 import LoanListScreen from "../screens/ApplicationsListScreen";
+import UserLoanSearchScreen from "../screens/UserLoanSearchScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -23,6 +24,11 @@ export default function AppNavigator() {
                 <Stack.Screen name="Login" component={LoginScreen} />
                 <Stack.Screen name="ApplicationForm" component={LoanFormScreen} />
                 <Stack.Screen name="LoanList" component={LoanListScreen} />
+                <Stack.Screen
+                    name="UserLoanSearch"
+                    component={UserLoanSearchScreen}
+                    options={{ title: 'Find Application' }}
+                />
             </Stack.Navigator>
         </NavigationContainer>
     );
